@@ -1,0 +1,17 @@
+node_modules
+.DS_Store
+*.tsbuildinfo
+.env*.local
+
+# build outputs
+packages/*/dist
+packages/web/dist-ssr
+packages/desktop/release
+packages/desktop/out
+
+# vite
+.vite
+
+# legacy Next.js (to be removed)
+.next
+next-env.d.ts
