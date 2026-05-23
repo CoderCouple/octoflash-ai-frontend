@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, useSearchParams, Link } from "react-router-dom";
 import { Loader2, Send, Sparkles, Smartphone, Monitor, Workflow as WorkflowIcon } from "lucide-react";
 
 import { projectsApi, type Orientation, type ProjectDetail } from "@octoflash/core";
@@ -41,6 +41,13 @@ export default function ProjectOverviewPage() {
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
+  const [searchParams] = useSearchParams();
+
+  // Allow `?publish=1` to deep-link straight into the dialog — useful for
+  // headless smoke tests and shareable "click here to publish" URLs.
+  useEffect(() => {
+    if (searchParams.get("publish") === "1") setPublishOpen(true);
+  }, [searchParams]);
 
   useEffect(() => {
     if (id) void openProject(id);
