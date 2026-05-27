@@ -29,9 +29,24 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
 import { StatusPill } from "@/components/status-pill";
 import { NodePalette } from "@/components/workflow/node-palette";
-import { FlowEditor, type SelectedNode } from "@/components/workflow/flow-editor";
+import {
+  FlowEditor,
+  ReactFlowProvider,
+  type SelectedNode,
+} from "@/components/workflow/flow-editor";
+import { ViewToggle, type WorkflowView } from "@/components/workflow/view-toggle";
+import { WorkflowJsonPanel } from "@/components/workflow/workflow-json-panel";
+import {
+  WorkflowExportButton,
+  WorkflowImportButton,
+} from "@/components/workflow/workflow-io";
 import { ClipSidebar } from "@/pages/project/clip-sidebar";
 import { SourceSidebar } from "@/pages/project/source-sidebar";
 import { TargetSidebar } from "@/pages/project/target-sidebar";
@@ -39,6 +54,13 @@ import { useProjectPolling } from "@/hooks/use-project-polling";
 import { useJobsStore } from "@/store/jobsStore";
 import { useProjectsStore } from "@/store/projectsStore";
 import { TaskType } from "@/workflow-engine/types";
+
+
+// Dev-only by default. Set VITE_EXPOSE_WORKFLOW_JSON=true in .env to surface
+// the toggle in a production build for power users.
+const SHOW_VIEW_TOGGLE =
+  import.meta.env.DEV ||
+  import.meta.env.VITE_EXPOSE_WORKFLOW_JSON === "true";
 
 export default function ProjectEditorPage() {
   const { id } = useParams<{ id: string }>();
@@ -48,6 +70,8 @@ export default function ProjectEditorPage() {
   const [generating, setGenerating] = useState(false);
   /** Collapsed = thin rail with expand button; open = full 380px ClipSidebar. */
   const [previewOpen, setPreviewOpen] = useState(true);
+  /** editor (default) / json / both — debug surface, dev-mode only. */
+  const [view, setView] = useState<WorkflowView>("editor");
 
   useEffect(() => {
     if (id) void openProject(id);
@@ -87,10 +111,10 @@ export default function ProjectEditorPage() {
   // — so we can't just compare ids. Resolution priority:
   //   1. node.data.scene_id — set by the backend bind step when Generate
   //      materializes Scene rows AND updates the node payload.
-  //   2. (node.data.n, orientation='portrait') — the seed activity writes
-  //      `n` into every scene-node's data; this matches it back to the
-  //      Scene row created by GenerateVideoWorkflow's create_scenes step.
-  //      Works even if the backend bind step hasn't run yet.
+  //   2. node.data.n — match by scene number. Project has up to two Scene
+  //      rows per `n` (portrait + landscape). Prefer the project's stated
+  //      orientation, but if that side hasn't rendered, fall back to the
+  //      one that has a videoUrl so the user actually sees a clip.
   // Falls through to null when neither matches — sidebar surfaces a
   // "planned but not rendered" placeholder.
   const selectedScene = (() => {
@@ -100,11 +124,14 @@ export default function ProjectEditorPage() {
       return p.scenes.find((s) => s.id === data.scene_id) ?? null;
     }
     if (typeof data?.n === "number") {
-      return (
-        p.scenes.find(
-          (s) => s.n === data.n && (s.orientation ?? "portrait") === "portrait",
-        ) ?? null
-      );
+      const candidates = p.scenes.filter((s) => s.n === data.n);
+      if (candidates.length === 0) return null;
+      const preferred = candidates.find((s) => s.orientation === p.orientation);
+      const other = candidates.find((s) => s.orientation !== p.orientation);
+      // Pick whichever side actually rendered; tie-break to project orientation.
+      if (preferred?.videoUrl) return preferred;
+      if (other?.videoUrl) return other;
+      return preferred ?? other ?? null;
     }
     // Legacy fallback — old FE seedFromScenes path used scene.id as the
     // React Flow node id directly.
@@ -114,6 +141,10 @@ export default function ProjectEditorPage() {
     p.status === "analyzed" || p.status === "generated" || p.status === "failed";
 
   return (
+    // ReactFlowProvider lifted to here so the JSON panel can share React
+    // Flow's store with the canvas. FlowEditor no longer wraps its own
+    // provider — both views see the same nodes/edges/viewport.
+    <ReactFlowProvider>
     <div className="flex h-screen w-full flex-col overflow-hidden">
       {/* ── Topbar ─────────────────────────────────────────────────── */}
       <header className="flex items-center gap-3 border-b px-4 h-11 bg-card/50">
@@ -133,7 +164,13 @@ export default function ProjectEditorPage() {
         </div>
         <StatusPill status={p.status} />
 
+        {SHOW_VIEW_TOGGLE && (
+          <ViewToggle view={view} onChange={setView} className="ml-3" />
+        )}
+
         <div className="ml-auto flex items-center gap-1.5">
+          <WorkflowImportButton />
+          <WorkflowExportButton filename={jsonFilename(p.title)} />
           <Button size="sm" variant="outline" className="h-7" disabled>
             <Wand2 className="size-3.5 mr-1" />
             Re-analyze
@@ -159,16 +196,47 @@ export default function ProjectEditorPage() {
         </div>
       </header>
 
-      {/* ── Main: palette (left) + canvas (centre) + preview (right) ── */}
+      {/* ── Main: palette (left) + view (centre) + preview (right) ── */}
       <div className="flex flex-1 overflow-hidden">
         <NodePalette />
 
+        {/*
+          FlowEditor stays mounted across view toggles so the React Flow
+          store (which WorkflowJsonPanel subscribes to via useNodes /
+          useEdges) keeps its nodes/edges between switches. In "json"
+          view the canvas is hidden under an absolute-positioned panel;
+          in "both" view the canvas sits in the left ResizablePanel. The
+          ternary below picks the layout.
+        */}
         <div className="flex-1 relative min-w-0">
-          <FlowEditor
-            project={p}
-            selectedNode={selectedNode}
-            onSelectNode={setSelectedNode}
-          />
+          {view !== "both" ? (
+            <div className="h-full">
+              <FlowEditor
+                project={p}
+                selectedNode={selectedNode}
+                onSelectNode={setSelectedNode}
+              />
+              {view === "json" && (
+                <div className="absolute inset-0 z-10 bg-card">
+                  <WorkflowJsonPanel filename={jsonFilename(p.title)} />
+                </div>
+              )}
+            </div>
+          ) : (
+            <ResizablePanelGroup orientation="horizontal" className="h-full">
+              <ResizablePanel defaultSize={60} minSize={30} className="overflow-hidden">
+                <FlowEditor
+                  project={p}
+                  selectedNode={selectedNode}
+                  onSelectNode={setSelectedNode}
+                />
+              </ResizablePanel>
+              <ResizableHandle withHandle />
+              <ResizablePanel defaultSize={40} minSize={20} className="overflow-hidden">
+                <WorkflowJsonPanel filename={jsonFilename(p.title)} />
+              </ResizablePanel>
+            </ResizablePanelGroup>
+          )}
         </div>
 
         {previewOpen ? (
@@ -230,8 +298,21 @@ export default function ProjectEditorPage() {
         )}
       </div>
     </div>
+    </ReactFlowProvider>
   );
 }
+
+
+/** Sanitize project title into a filename — keeps the JSON download tidy. */
+function jsonFilename(title: string): string {
+  const safe = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+  return `workflow-${safe || "project"}.json`;
+}
+
 
 function Centered({
   children,
