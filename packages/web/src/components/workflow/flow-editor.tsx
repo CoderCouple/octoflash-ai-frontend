@@ -94,25 +94,21 @@ export type SelectedNode =
     }
   | null;
 
-export function FlowEditor({
-  project,
-  onSelectNode,
-  selectedNode,
-}: {
+/**
+ * Public FlowEditor — assumes a `<ReactFlowProvider>` ancestor. Editor pages
+ * wrap once at the top of the layout so sibling panels (JSON view, debug
+ * inspectors) share the same React Flow store. The lone `ReactFlowProvider`
+ * import is re-exported for callers that don't already have one.
+ */
+export function FlowEditor(props: {
   project: ProjectDetail;
   onSelectNode: (selected: SelectedNode) => void;
   selectedNode: SelectedNode;
 }) {
-  return (
-    <ReactFlowProvider>
-      <FlowEditorInner
-        project={project}
-        onSelectNode={onSelectNode}
-        selectedNode={selectedNode}
-      />
-    </ReactFlowProvider>
-  );
+  return <FlowEditorInner {...props} />;
 }
+
+export { ReactFlowProvider };
 
 function FlowEditorInner({
   project,
@@ -133,25 +129,27 @@ function FlowEditorInner({
   // overwrite a freshly-fetched definition with the same payload.
   const loadingRef = useRef(true);
 
-  // ── load — runs ONCE per project.id ────────────────────────────────
+  // ── load ───────────────────────────────────────────────────────────
   //
-  // Critical: this effect must NOT re-run on every project refetch. The
-  // parent page polls /projects/:id while a workflow is in flight, which
-  // hands us a new `project` reference (and a new `project.scenes` array)
-  // on every tick. If `project.scenes` were in the deps, every poll would:
-  //   1. blast local canvas state with whatever the backend last saved
-  //   2. delete a node the user just dropped if the debounced save hadn't
-  //      flushed yet
-  // → "nodes / edges disappear after I drop them"
+  // Re-fetches workflow.definition whenever `project.id` or `project.status`
+  // change. The `[project.id, project.status]` deps coalesce by value —
+  // useProjectPolling handing us a new `project` reference per tick does
+  // NOT retrigger this effect as long as those two strings are unchanged.
   //
-  // Once we've fetched the initial definition the canvas is owned by local
-  // state + the debounced save below. Server-side seeding (the analyze
-  // workflow populating workflow.definition) is only picked up if the user
-  // navigates away and back, which is acceptable for the seed-once flow.
-  const loadedForRef = useRef<string | null>(null);
+  // The single guard is `nodesRef.current.length === 0` ("only load when
+  // canvas is empty"). It serves two jobs:
+  //
+  //   * StrictMode-safe — the dev double-invoke is fine because the guard
+  //     is read from a ref that survives cleanup. (An earlier version
+  //     used a `loadedForRef` ref-as-once-flag that the cleanup set, so
+  //     the SECOND invocation skipped the fetch AND the FIRST invocation
+  //     was cancelled → setNodes never ran → blank canvas.)
+  //
+  //   * "Don't blast user edits" — when status flips analyzed → generating
+  //     mid-edit, we don't want to clobber dragged-in work. Empty canvas
+  //     means a server-side seed (analyze tail) is safe to pick up.
   useEffect(() => {
-    if (loadedForRef.current === project.id) return;
-    loadedForRef.current = project.id;
+    if (nodesRef.current.length > 0) return;
     let cancelled = false;
     (async () => {
       loadingRef.current = true;
@@ -167,13 +165,10 @@ function FlowEditorInner({
             const { x = 0, y = 0, zoom = 1 } = defn.viewport;
             setViewport({ x, y, zoom });
           }
-        } else {
-          // Empty workflow — analyze hasn't seeded the DAG yet, or it's a
-          // bare project. Leave the canvas empty; the user can drag nodes
-          // in, or navigate away + back to pick up backend-seeded content.
-          setNodes([]);
-          setEdges([]);
         }
+        // No `else` — leaving canvas empty when the backend definition is
+        // null is correct. The dep-driven re-run on project.status flip
+        // picks up the seeded DAG once analyze writes it.
       } catch (e) {
         console.error("[FlowEditor] load failed:", e);
       } finally {
@@ -187,7 +182,8 @@ function FlowEditorInner({
     return () => {
       cancelled = true;
     };
-  }, [project.id, setNodes, setEdges, setViewport]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.id, project.status, setNodes, setEdges, setViewport]);
 
   // ── undo / redo ─────────────────────────────────────────────────────
   //
