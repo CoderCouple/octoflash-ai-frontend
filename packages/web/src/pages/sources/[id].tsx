@@ -9,7 +9,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSourcesStore } from "@/store/sourcesStore";
-import type { SourceVideo, SourceVideoKind } from "@octoflash/core";
+import {
+  useAsSourceQueueStore,
+  useError,
+  useIsCurrent,
+  useIsPending,
+} from "@/store/useAsSourceQueueStore";
+import { type SourceVideo, type SourceVideoKind } from "@octoflash/core";
 
 type FeedTab = SourceVideoKind;
 
@@ -384,6 +390,15 @@ function SourceHeader({
 
 function VideoRow({ v }: { v: SourceVideo }) {
   const aspect = v.kind === "short" ? "aspect-[9/16] w-[70px]" : "aspect-video w-[124px]";
+  // Clicking the button enqueues the video — the store drains FIFO,
+  // one POST /projects/from-source at a time, so a user clicking five
+  // videos in quick succession doesn't fan out five parallel calls.
+  // Per-row state reads the queue's "is this me?" selectors.
+  const enqueue = useAsSourceQueueStore((s) => s.enqueue);
+  const isCurrent = useIsCurrent(v.id);
+  const isPending = useIsPending(v.id);
+  const err = useError(v.id);
+  const busy = isCurrent || isPending;
   return (
     <li className="flex gap-3.5 px-6 py-3.5 border-b transition-colors hover:bg-accent/40">
       <div className={cn("rounded shrink-0 relative overflow-hidden bg-muted", aspect)}>
@@ -406,10 +421,29 @@ function VideoRow({ v }: { v: SourceVideo }) {
             </Badge>
           )}
         </p>
-        <div className="flex gap-1.5">
-          <Button variant="outline" size="sm" className="h-7" disabled>
-            {/* TODO: wire to projectsApi.create({ title, sourceUrl: v.sourceUrl }) */}
-            <Plus className="size-3 mr-1" /> Use as source
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7"
+            onClick={() => enqueue(v)}
+            disabled={busy}
+          >
+            {isCurrent ? (
+              <>
+                <Loader2 className="size-3 mr-1 animate-spin" />
+                Creating…
+              </>
+            ) : isPending ? (
+              <>
+                <Loader2 className="size-3 mr-1 animate-spin" />
+                Queued
+              </>
+            ) : (
+              <>
+                <Plus className="size-3 mr-1" /> Use as source
+              </>
+            )}
           </Button>
           <a
             href={v.sourceUrl}
@@ -419,6 +453,9 @@ function VideoRow({ v }: { v: SourceVideo }) {
           >
             <ExternalLink className="size-3" /> Original
           </a>
+          {err && (
+            <span className="text-[11px] text-destructive truncate">{err}</span>
+          )}
         </div>
       </div>
     </li>
