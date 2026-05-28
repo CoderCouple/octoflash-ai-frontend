@@ -92,15 +92,26 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const base = baseUrl ?? getRuntimeConfig().apiUrl;
   const url = `${base.replace(/\/$/, "")}${path}`;
 
+  // FormData / Blob / ArrayBuffer skip the JSON path — the browser sets
+  // the right content-type (with the multipart boundary) when we leave it
+  // unset, and the body is passed through verbatim.
+  const isStreamingBody =
+    body instanceof FormData ||
+    body instanceof Blob ||
+    body instanceof ArrayBuffer;
+
   const init: RequestInit = {
     ...rest,
     headers: {
-      "content-type": "application/json",
+      ...(isStreamingBody ? {} : { "content-type": "application/json" }),
       accept: "application/json",
       ...headers,
     },
-    body:
-      body !== undefined ? JSON.stringify(raw ? body : toSnake(body)) : undefined,
+    body: isStreamingBody
+      ? (body as BodyInit)
+      : body !== undefined
+        ? JSON.stringify(raw ? body : toSnake(body))
+        : undefined,
   };
 
   const res = await fetch(url, init);
@@ -135,6 +146,8 @@ export const api = {
     request<T>(path, { ...opts, method: "POST", body }),
   patch: <T>(path: string, body?: unknown, opts?: RequestOptions) =>
     request<T>(path, { ...opts, method: "PATCH", body }),
+  put: <T>(path: string, body?: unknown, opts?: RequestOptions) =>
+    request<T>(path, { ...opts, method: "PUT", body }),
   del: <T>(path: string, opts?: RequestOptions) =>
     request<T>(path, { ...opts, method: "DELETE" }),
 };

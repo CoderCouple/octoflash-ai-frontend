@@ -62,6 +62,13 @@ export type UpdatePreferencesInput = Partial<UserPreferences>;
 export const meApi = {
   get: () => api.get<MeContext>("/api/v1/me"),
   update: (body: UpdateProfileInput) => api.patch<Me>("/api/v1/me", body),
+  /** Upload an avatar image (multipart). Server stores it (S3 in prod,
+   *  local /storage/avatars/* in dev) and sets `user.avatar_url`. */
+  uploadAvatar: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api.post<Me>("/api/v1/me/avatar", fd);
+  },
   switchContext: (body: SwitchContextInput) =>
     api.put<Me>("/api/v1/me/context", body),
   updatePreferences: (body: UpdatePreferencesInput) =>
