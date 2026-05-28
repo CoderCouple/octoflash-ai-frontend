@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { CreditCard, Film, FlaskConical, KeyRound, PencilRuler, Rss, Send, Settings, Sparkles, Workflow, Zap } from "lucide-react";
+import { CreditCard, Film, FlaskConical, KeyRound, Mail, PencilRuler, Rss, Send, Settings, Sparkles, Workflow, Zap } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
   SidebarGroupLabel, SidebarHeader, SidebarMenu,
@@ -83,6 +83,11 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isActive("/settings")} tooltip="Settings">
                   <Link to="/settings"><Settings /> <span>Settings</span></Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive("/contact")} tooltip="Contact">
+                  <Link to="/contact"><Mail /> <span>Contact</span></Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
