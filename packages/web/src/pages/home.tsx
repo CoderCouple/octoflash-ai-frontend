@@ -49,6 +49,7 @@ const NAV = [
   { label: "Features", href: "#features" },
   { label: "Gallery", href: "/gallery" },
   { label: "Pricing", href: "/pricing" },
+  { label: "Contact", href: "/contact" },
 ];
 
 // Real Manim renders (downloaded into public/examples/).

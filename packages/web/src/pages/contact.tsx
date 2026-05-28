@@ -94,8 +94,6 @@ export default function ContactPage() {
   return (
     <PublicShell>
       <PageHero
-        breadcrumb={[{ label: "Home", href: "/" }, { label: "Contact" }]}
-        eyebrow="Contact"
         title="Get in Touch"
         subtitle="Drop a note about anything — a collaboration, a question, or just to say hi. We read every message."
       />
