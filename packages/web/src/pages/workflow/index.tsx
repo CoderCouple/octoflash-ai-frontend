@@ -23,6 +23,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   AlertCircle,
+  Eye,
   FileText,
   ListTree,
   Loader2,
@@ -34,6 +35,7 @@ import {
   Trash,
 } from "lucide-react";
 
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { SortMenu, applySort, type SortKey } from "@/components/sort-menu";
 
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -154,6 +156,7 @@ function WorkflowRow({ project: p }: { project: Project }) {
   const startGenerate = useJobsStore((s) => s.startGenerate);
   const deleteProject = useProjectsStore((s) => s.deleteProject);
   const [running, setRunning] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const meta = statusIcon(p.status);
   const isDraft = p.status === "queued" || p.status === "analyzing" || p.status === "analyzed";
@@ -171,28 +174,14 @@ function WorkflowRow({ project: p }: { project: Project }) {
     }
   }
 
-  async function onDelete() {
-    // Projects and workflows are 1:1 in this app, so deleting the
-    // workflow row deletes the parent project too (soft-delete).
-    if (!confirm(
-      `Delete "${p.title}"?\n\n` +
-      "This also removes the project — a workflow can't exist without one. " +
-      "Soft-delete; can be restored from the DB until purged."
-    )) return;
-    try {
-      await deleteProject(p.id);
-    } catch (err) {
-      console.error("[workflow-row] delete failed:", err);
-    }
-  }
-
   // Whole-card click → open the workflow editor. Action buttons inside the
   // card stop propagation so clicking them doesn't ALSO navigate.
   const openEditor = () => navigate(`/workflow/${p.id}`);
   const stop = (e: React.MouseEvent) => e.stopPropagation();
 
   return (
-    <Card
+    <>
+      <Card
       role="link"
       tabIndex={0}
       onClick={openEditor}
@@ -277,7 +266,7 @@ function WorkflowRow({ project: p }: { project: Project }) {
               <DropdownMenuLabel>Actions</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => navigate(`/projects/${p.id}`)}>
-                Open overview
+                <Eye className="size-3.5 mr-1.5" /> Preview
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => void startGenerate(p.id)}
@@ -288,7 +277,7 @@ function WorkflowRow({ project: p }: { project: Project }) {
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
-                onSelect={onDelete}
+                onSelect={() => setConfirmOpen(true)}
               >
                 <Trash className="size-3.5 mr-1.5" /> Delete project
               </DropdownMenuItem>
@@ -321,7 +310,20 @@ function WorkflowRow({ project: p }: { project: Project }) {
           </div>
         </div>
       )}
-    </Card>
+      </Card>
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title={`Delete "${p.title}"?`}
+        description={
+          "This also removes the project — a workflow can't exist without one.\n\n" +
+          "Soft-delete; can be restored from the DB until purged."
+        }
+        confirmLabel="Delete project"
+        destructive
+        onConfirm={() => deleteProject(p.id)}
+      />
+    </>
   );
 }
 

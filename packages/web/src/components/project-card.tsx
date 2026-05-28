@@ -39,6 +39,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { StatusPill } from "@/components/status-pill";
 import { cn } from "@/lib/utils";
+import { useState } from "react";
+
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useJobsStore } from "@/store/jobsStore";
 import { useProjectsStore } from "@/store/projectsStore";
 import { formatDuration, projectsApi, type Orientation, type Project } from "@octoflash/core";
@@ -53,18 +56,10 @@ export function ProjectCard({
 }) {
   const deleteProject = useProjectsStore((s) => s.deleteProject);
   const startGenerate = useJobsStore((s) => s.startGenerate);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const inFlight =
     p.status === "queued" || p.status === "analyzing" || p.status === "generating";
-
-  const onDelete = async () => {
-    if (!confirm(`Delete "${p.title}"? This soft-deletes the project.`)) return;
-    try {
-      await deleteProject(p.id);
-    } catch (err) {
-      console.error("[project-card] delete failed:", err);
-    }
-  };
 
   const onRetry = async () => {
     try {
@@ -149,7 +144,7 @@ export function ProjectCard({
             aria-label="Project actions"
             className={cn(
               buttonVariants({ variant: "outline", size: "icon" }),
-              "size-7 bg-background/85 backdrop-blur opacity-0 group-hover:opacity-100 focus:opacity-100 data-[state=open]:opacity-100 transition-opacity",
+              "size-7 bg-background/85 backdrop-blur",
             )}
           >
             <MoreVertical className="size-3.5" />
@@ -163,13 +158,23 @@ export function ProjectCard({
             </DropdownMenuItem>
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
-              onSelect={onDelete}
+              onSelect={() => setConfirmOpen(true)}
             >
               <Trash className="size-3.5 mr-1.5" /> Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title={`Delete "${p.title}"?`}
+        description="This soft-deletes the project. It can be restored from the DB until purged."
+        confirmLabel="Delete project"
+        destructive
+        onConfirm={() => deleteProject(p.id)}
+      />
     </div>
   );
 }
