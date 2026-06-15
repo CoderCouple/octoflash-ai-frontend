@@ -20,6 +20,37 @@
 
 import { getRuntimeConfig } from "../config.js";
 
+// ─── Auth token plumbing ─────────────────────────────────────────────────────
+//
+// The auth provider lives in the *consumer* package (Supabase in
+// packages/web; whatever desktop uses later) so this lib stays
+// provider-agnostic. Consumers call `setAuthTokenGetter()` at startup
+// with a function the request loop can invoke per call. May be sync or
+// async — Supabase's in-memory session lookup is sync; the refresh path
+// is async.
+//
+// Returning `null` skips the `Authorization` header — the request goes
+// out unauthenticated and the backend will 401/403 as appropriate.
+
+type AuthTokenGetter = () => string | null | Promise<string | null>;
+
+let _getAuthToken: AuthTokenGetter | null = null;
+
+export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
+  _getAuthToken = getter;
+}
+
+async function _resolveAuthToken(): Promise<string | null> {
+  if (!_getAuthToken) return null;
+  try {
+    return await _getAuthToken();
+  } catch {
+    // Don't let auth-resolve failures break the request — let it 401
+    // and the FE will treat that as "session expired".
+    return null;
+  }
+}
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -100,11 +131,14 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     body instanceof Blob ||
     body instanceof ArrayBuffer;
 
+  const token = await _resolveAuthToken();
+
   const init: RequestInit = {
     ...rest,
     headers: {
       ...(isStreamingBody ? {} : { "content-type": "application/json" }),
       accept: "application/json",
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
       ...headers,
     },
     body: isStreamingBody

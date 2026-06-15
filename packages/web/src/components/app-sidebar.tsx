@@ -1,11 +1,12 @@
-import { Link, useLocation } from "react-router-dom";
-import { CreditCard, Film, FlaskConical, KeyRound, Mail, PencilRuler, Rss, Send, Settings, Sparkles, Workflow, Zap } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { CreditCard, Film, FlaskConical, KeyRound, LogOut, Mail, PencilRuler, Rss, Send, Settings, Sparkles, Workflow, Zap } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
   SidebarGroupLabel, SidebarHeader, SidebarMenu,
   SidebarMenuButton, SidebarMenuItem, SidebarRail,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useAuthStore } from "@/store";
 import { useUserSettingsStore } from "@/store/userSettingsStore";
 
 const workspace = [
@@ -19,10 +20,17 @@ const workspace = [
 
 export function AppSidebar() {
   const path = useLocation().pathname;
+  const navigate = useNavigate();
   const isActive = (href: string) => path === href || path.startsWith(href + "/");
+  const signOut = useAuthStore((s) => s.signOut);
   const displayName = useUserSettingsStore((s) => s.displayName);
   const email = useUserSettingsStore((s) => s.email);
   const avatarUrl = useUserSettingsStore((s) => s.avatarUrl);
+
+  async function handleSignOut() {
+    await signOut();
+    navigate("/login", { replace: true });
+  }
   const initials =
     displayName
       .split(/\s+/)
@@ -109,6 +117,15 @@ export function AppSidebar() {
                   <span className="text-muted-foreground text-[10px] truncate">{email}</span>
                 </div>
               </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              onClick={handleSignOut}
+              tooltip="Sign out"
+              className="text-muted-foreground"
+            >
+              <LogOut /> <span>Sign out</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

@@ -1,5 +1,6 @@
 import { createBrowserRouter } from "react-router-dom";
 import { AppShell } from "./layouts/app-shell";
+import { ProtectedRoute } from "./components/auth/protected-route";
 import HomePage from "./pages/home";
 import PricingPage from "./pages/pricing";
 import GalleryPage from "./pages/gallery";
@@ -11,6 +12,8 @@ import TeachersPage from "./pages/teachers";
 import HelpPage from "./pages/help";
 import WhatIsManimPage from "./pages/what-is-manim";
 import LoginPage from "./pages/login";
+import SignupPage from "./pages/signup";
+import AuthCallbackPage from "./pages/auth-callback";
 import ProjectsPage from "./pages/videos";
 import SourcesIndex from "./pages/sources";
 import SourceDetail from "./pages/sources/[id]";
@@ -39,26 +42,36 @@ export const router = createBrowserRouter([
   { path: "/help", element: <HelpPage /> },
   { path: "/what-is-manim", element: <WhatIsManimPage /> },
   { path: "/login", element: <LoginPage /> },
-  // Full-screen workflow editor — no AppShell, no left nav.
-  { path: "/workflow/:id", element: <ProjectEditorPage /> },
+  { path: "/signup", element: <SignupPage /> },
+  { path: "/auth/callback", element: <AuthCallbackPage /> },
+  // Everything below requires an authenticated Supabase session.
+  // ProtectedRoute waits for the first getSession() to resolve, then
+  // either renders <Outlet /> or redirects to /login.
   {
-    element: <AppShell />,
+    element: <ProtectedRoute />,
     children: [
-      { path: "/projects", element: <ProjectsPage /> },
-      { path: "/projects/:id", element: <ProjectOverviewPage /> },
-      { path: "/workflow", element: <WorkflowListPage /> },
-      { path: "/editor", element: <EditorEntryPage /> },
-      { path: "/sources", element: <SourcesIndex /> },
-      { path: "/sources/:id", element: <SourceDetail /> },
-      { path: "/targets", element: <TargetsPage /> },
-      { path: "/playground", element: <PlaygroundPage /> },
-      { path: "/settings", element: <SettingsPage /> },
-      { path: "/credentials", element: <CredentialsPage /> },
-      { path: "/billing", element: <BillingPage /> },
-      { path: "/billing/plans", element: <BillingPlansPage /> },
-      { path: "/workspace/:id", element: <WorkspacePage /> },
-      // Catch-all 404 — keep last in this branch so explicit routes match first.
-      { path: "*", element: <NotFoundPage /> },
+      // Full-screen workflow editor — no AppShell, no left nav.
+      { path: "/workflow/:id", element: <ProjectEditorPage /> },
+      {
+        element: <AppShell />,
+        children: [
+          { path: "/projects", element: <ProjectsPage /> },
+          { path: "/projects/:id", element: <ProjectOverviewPage /> },
+          { path: "/workflow", element: <WorkflowListPage /> },
+          { path: "/editor", element: <EditorEntryPage /> },
+          { path: "/sources", element: <SourcesIndex /> },
+          { path: "/sources/:id", element: <SourceDetail /> },
+          { path: "/targets", element: <TargetsPage /> },
+          { path: "/playground", element: <PlaygroundPage /> },
+          { path: "/settings", element: <SettingsPage /> },
+          { path: "/credentials", element: <CredentialsPage /> },
+          { path: "/billing", element: <BillingPage /> },
+          { path: "/billing/plans", element: <BillingPlansPage /> },
+          { path: "/workspace/:id", element: <WorkspacePage /> },
+          // Catch-all 404 — keep last in this branch so explicit routes match first.
+          { path: "*", element: <NotFoundPage /> },
+        ],
+      },
     ],
   },
 ]);

@@ -4,7 +4,7 @@
  *   GET   /api/v1/me              → user + active org/workspace/role
  *                                   (`user.preferences` is included inline)
  *   PATCH /api/v1/me              → update display_name + avatar_url
- *                                   (email is Cognito-owned; not settable here)
+ *                                   (email is owned by Supabase Auth; not settable here)
  *   PUT   /api/v1/me/context      → switch active org / workspace
  *   PATCH /api/v1/me/preferences  → sparse partial update of preferences blob
  *                                   (only present keys written; `null` clears)
@@ -26,7 +26,7 @@ export type UserPreferences = {
 
 export type Me = {
   id: string;
-  cognitoSub: string;
+  authSub: string;
   email: string | null;
   displayName: string | null;
   avatarUrl: string | null;
