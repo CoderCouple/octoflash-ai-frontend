@@ -1,8 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTheme } from "next-themes";
-import { Github, Moon, Sun, Twitter, Zap } from "lucide-react";
+import { Github, LayoutDashboard, Moon, Sun, Twitter, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuthReady, useIsAuthenticated } from "@/store";
 
 /* -------------------------------------------------------------------------- */
 /*                          Shared nav + footer data                          */
@@ -81,19 +82,7 @@ export function PublicShell({ children }: { children: ReactNode }) {
           </nav>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <Link
-              to="/login"
-              className="hidden sm:inline-flex text-[15px] font-medium text-foreground/75 hover:text-foreground px-3 h-9 items-center"
-            >
-              Sign in
-            </Link>
-            <Button
-              size="sm"
-              className="h-9 px-4 text-[14px] rounded-md"
-              onClick={() => navigate("/signup")}
-            >
-              Sign up
-            </Button>
+            <AuthCtaButtons />
           </div>
         </div>
       </header>
@@ -132,6 +121,57 @@ export function PublicShell({ children }: { children: ReactNode }) {
         </div>
       </footer>
     </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*                          Header auth CTA buttons                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Swaps between Sign in / Sign up (anon) and Dashboard (authed). Held off
+ * until the auth bootstrap settles (`ready`) so a logged-in user doesn't
+ * flash "Sign up" for one paint before flipping to Dashboard.
+ */
+function AuthCtaButtons() {
+  const navigate = useNavigate();
+  const ready = useAuthReady();
+  const authed = useIsAuthenticated();
+
+  if (!ready) {
+    // Reserve roughly the same width so layout doesn't shift on hydrate.
+    return <div className="w-[140px] h-9" />;
+  }
+
+  if (authed) {
+    return (
+      <Button
+        size="sm"
+        className="h-9 px-4 text-[14px] rounded-md gap-1.5"
+        onClick={() => navigate("/projects")}
+      >
+        <LayoutDashboard className="size-4" />
+        Dashboard
+      </Button>
+    );
+  }
+
+  return (
+    <>
+      <Link
+        to="/login"
+        className="hidden sm:inline-flex text-[15px] font-medium text-foreground/75 hover:text-foreground px-3 h-9 items-center"
+      >
+        Sign in
+      </Link>
+      <Button
+        size="sm"
+        className="h-9 px-4 text-[14px] rounded-md"
+        onClick={() => navigate("/signup")}
+      >
+        Sign up
+      </Button>
+    </>
   );
 }
 
