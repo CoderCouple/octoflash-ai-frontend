@@ -195,7 +195,7 @@ export default function GalleryPage() {
             >
               Sign in
             </Link>
-            <Button size="sm" className="h-9 px-4 text-[14px] rounded-md" onClick={() => navigate("/login?signup=1")}>
+            <Button size="sm" className="h-9 px-4 text-[14px] rounded-md" onClick={() => navigate("/signup")}>
               Sign up
             </Button>
           </div>
@@ -322,7 +322,7 @@ export default function GalleryPage() {
               <Button
                 size="lg"
                 className="h-11 px-5 font-semibold rounded-md"
-                onClick={() => navigate("/login?signup=1")}
+                onClick={() => navigate("/signup")}
               >
                 Sign up <ArrowRight className="size-4 ml-1.5" />
               </Button>

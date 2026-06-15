@@ -62,7 +62,7 @@ export default function PricingPage() {
             <Button
               size="sm"
               className="h-9 px-4 text-[14px] rounded-md"
-              onClick={() => navigate("/login?signup=1")}
+              onClick={() => navigate("/signup")}
             >
               Sign up
             </Button>
