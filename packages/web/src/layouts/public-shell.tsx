@@ -133,7 +133,7 @@ export function PublicShell({ children }: { children: ReactNode }) {
  * until the auth bootstrap settles (`ready`) so a logged-in user doesn't
  * flash "Sign up" for one paint before flipping to Dashboard.
  */
-function AuthCtaButtons() {
+export function AuthCtaButtons() {
   const navigate = useNavigate();
   const ready = useAuthReady();
   const authed = useIsAuthenticated();

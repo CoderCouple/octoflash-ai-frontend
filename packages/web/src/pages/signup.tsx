@@ -7,7 +7,7 @@
  * we show a "Check your email" panel and they finish via the link.
  */
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Loader2, Mail, Zap } from "lucide-react";
 
@@ -15,14 +15,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/lib/supabase";
+import { useAuthReady, useIsAuthenticated } from "@/store";
 
 export default function SignupPage() {
   const navigate = useNavigate();
+  const ready = useAuthReady();
+  const authed = useIsAuthenticated();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsConfirm, setNeedsConfirm] = useState(false);
+
+  // Already signed in? Skip the form — go to the dashboard.
+  useEffect(() => {
+    if (ready && authed) navigate("/projects", { replace: true });
+  }, [ready, authed, navigate]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();

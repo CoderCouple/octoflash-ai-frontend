@@ -10,7 +10,7 @@
  * onward.
  */
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Github, Globe, Loader2, Zap } from "lucide-react";
 
@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/lib/supabase";
+import { useAuthReady, useIsAuthenticated } from "@/store";
 
 type LocationState = { from?: { pathname: string } };
 
@@ -26,6 +27,15 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const redirectTo = (location.state as LocationState | null)?.from?.pathname ?? "/projects";
+  const ready = useAuthReady();
+  const authed = useIsAuthenticated();
+
+  // Already signed in? Don't show the form — bounce to wherever they
+  // were headed (or /projects by default). Gated on `ready` so we
+  // don't bounce in the half-instant before getSession() resolves.
+  useEffect(() => {
+    if (ready && authed) navigate(redirectTo, { replace: true });
+  }, [ready, authed, navigate, redirectTo]);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

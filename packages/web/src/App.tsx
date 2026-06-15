@@ -1,20 +1,12 @@
 import { useEffect } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { queryClient } from "@/lib/query-client";
 import { useAuthStore } from "@/store";
 import { router } from "./routes";
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 30_000,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
 
 export function App() {
   // Bootstrap auth before the router mounts. We do this at App rather

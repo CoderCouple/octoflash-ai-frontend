@@ -19,6 +19,7 @@ import type { Session, User } from "@supabase/supabase-js";
 
 import { setAuthTokenGetter } from "@octoflash/core";
 
+import { queryClient } from "@/lib/query-client";
 import { supabase } from "@/lib/supabase";
 
 type AuthState = {
@@ -70,8 +71,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signOut: async () => {
+    // Supabase wipes localStorage tokens + invalidates the refresh
+    // token server-side (default scope='global'). onAuthStateChange
+    // then fires SIGNED_OUT → setSession(null) → useIsAuthenticated
+    // flips false, ProtectedRoute starts redirecting.
     await supabase.auth.signOut();
-    // onAuthStateChange will fire SIGNED_OUT → setSession(null).
+    // Drop every cached server response so a subsequent sign-in as
+    // a different user doesn't render stale /me / /projects data
+    // before the new fetches resolve.
+    queryClient.clear();
   },
 }));
 

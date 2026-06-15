@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useTheme } from "next-themes";
+import { AuthCtaButtons } from "@/layouts/public-shell";
 import {
   ArrowRight,
   ChevronRight,
@@ -189,15 +190,7 @@ export default function GalleryPage() {
           </nav>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <Link
-              to="/login"
-              className="hidden sm:inline-flex text-[15px] font-medium text-foreground/75 hover:text-foreground px-3 h-9 items-center"
-            >
-              Sign in
-            </Link>
-            <Button size="sm" className="h-9 px-4 text-[14px] rounded-md" onClick={() => navigate("/signup")}>
-              Sign up
-            </Button>
+            <AuthCtaButtons />
           </div>
         </div>
       </header>
