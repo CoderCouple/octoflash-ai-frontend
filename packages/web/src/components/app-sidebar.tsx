@@ -1,13 +1,14 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { CreditCard, Film, FlaskConical, KeyRound, LogOut, Mail, PencilRuler, Rss, Send, Settings, Sparkles, Workflow, Zap } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { meApi } from "@octoflash/core";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
   SidebarGroupLabel, SidebarHeader, SidebarMenu,
   SidebarMenuButton, SidebarMenuItem, SidebarRail,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useAuthStore } from "@/store";
-import { useUserSettingsStore } from "@/store/userSettingsStore";
+import { useAuthStore, useIsAuthenticated } from "@/store";
 
 const workspace = [
   { id: "projects",   label: "Projects",   href: "/projects",   icon: Film },
@@ -23,9 +24,25 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const isActive = (href: string) => path === href || path.startsWith(href + "/");
   const signOut = useAuthStore((s) => s.signOut);
-  const displayName = useUserSettingsStore((s) => s.displayName);
-  const email = useUserSettingsStore((s) => s.email);
-  const avatarUrl = useUserSettingsStore((s) => s.avatarUrl);
+  const authed = useIsAuthenticated();
+
+  // Hydrate the profile row from /me. React Query is already in the
+  // app; this just piggy-backs. Gated on `authed` so we don't fire
+  // /me from public pages where it'd 401.
+  const { data: me } = useQuery({
+    queryKey: ["me"],
+    queryFn: () => meApi.get(),
+    enabled: authed,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const email = me?.user?.email ?? "";
+  // Fall back to the email's local-part so the row never reads as
+  // empty in the moment between sign-in and /me landing.
+  const displayName =
+    me?.user?.displayName ?? (email ? email.split("@")[0] : "Account");
+  const avatarUrl = me?.user?.avatarUrl ?? null;
 
   async function handleSignOut() {
     await signOut();
