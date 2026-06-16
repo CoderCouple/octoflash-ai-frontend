@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "Octoflash - Queue YouTube Videos",
+  "version": "1.1.0",
+  "description": "Right-click any YouTube video to queue it in Octoflash, and sync your YouTube cookies so the backend can fetch source video without IP-blocks.",
+  "permissions": ["contextMenus", "storage", "activeTab", "cookies", "alarms"],
+  "host_permissions": [
+    "*://*.youtube.com/*",
+    "*://youtu.be/*",
+    "*://localhost/*",
+    "*://127.0.0.1/*",
+    "*://*.octoflash.ai/*",
+    "*://*.vercel.app/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://localhost/*",
+        "*://127.0.0.1/*",
+        "*://*.octoflash.ai/*",
+        "*://*.vercel.app/*"
+      ],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Octoflash"
+  },
+  "icons": {
+    "16": "icon16.png",
+    "32": "icon32.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}
