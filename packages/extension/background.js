@@ -44,6 +44,12 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
+// Open the side panel when the user clicks the toolbar action button.
+// Without this, the click is a no-op when no `action.default_popup` is set.
+chrome.sidePanel
+  .setPanelBehavior({ openPanelOnActionClick: true })
+  .catch((err) => console.warn("Octoflash: sidePanel.setPanelBehavior failed:", err));
+
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name !== COOKIE_REFRESH_ALARM) return;
   try {
