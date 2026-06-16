@@ -71,10 +71,17 @@ els.queueBtn.addEventListener("click", async () => {
   try {
     const { apiUrl } = await chrome.storage.sync.get({ apiUrl: DEFAULT_API_URL });
     const options = readOptions();
+    // Pull the Supabase JWT the content script published so the queued
+    // project lands under the signed-in user — otherwise the BE falls
+    // through to default_user_id and the per-user YouTube cookies lookup
+    // misses.
+    const { authToken } = await chrome.storage.local.get(["authToken"]);
+    const headers = { "Content-Type": "application/json" };
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
 
     const res = await fetch(`${apiUrl}/api/v1/projects/from-source`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         source_url: url,
         title: null,
