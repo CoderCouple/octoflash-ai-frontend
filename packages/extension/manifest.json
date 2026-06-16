@@ -10,7 +10,8 @@
     "*://localhost/*",
     "*://127.0.0.1/*",
     "*://*.octoflash.ai/*",
-    "*://*.vercel.app/*"
+    "*://*.vercel.app/*",
+    "*://*.railway.app/*"
   ],
   "background": {
     "service_worker": "background.js"
