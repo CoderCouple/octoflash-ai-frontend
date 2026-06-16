@@ -9,7 +9,7 @@
 //      Auto-refreshes weekly via chrome.alarms so cookies stay current
 //      with no user touch.
 
-const DEFAULT_API_URL = "http://localhost:8000";
+const DEFAULT_API_URL = "https://api-production-9e2a5.up.railway.app";
 
 const DEFAULT_OPTIONS = {
   quality: "720p",

@@ -1,6 +1,6 @@
 // Octoflash Chrome Extension - Popup
 
-const DEFAULT_API_URL = "http://localhost:8008";
+const DEFAULT_API_URL = "https://api-production-9e2a5.up.railway.app";
 
 const DEFAULTS = {
   quality: "720p",
