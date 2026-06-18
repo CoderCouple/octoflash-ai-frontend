@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Type } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { NewFromTextDialog } from "@/components/new-from-text-dialog";
 import { NewProjectDialog } from "@/components/new-project-dialog";
 import { ProjectCard } from "@/components/project-card";
 import { UrlPasteForm } from "@/components/forms/url-paste-form";
@@ -26,6 +27,7 @@ export default function ProjectsPage() {
   const [filter, setFilter] = useState<ProjectStatus | "all">("all");
   const [sort, setSort] = useState<SortKey>("newest");
   const [newOpen, setNewOpen] = useState(false);
+  const [newFromTextOpen, setNewFromTextOpen] = useState(false);
 
   useEffect(() => {
     void loadProjects();
@@ -51,9 +53,14 @@ export default function ProjectsPage() {
             Paste a source URL — Octoflash analyses it and turns it into a Manim video.
           </p>
         </div>
-        <Button size="sm" onClick={() => setNewOpen(true)}>
-          <Plus className="size-3.5 mr-1" /> New
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => setNewFromTextOpen(true)}>
+            <Type className="size-3.5 mr-1" /> Type a brief
+          </Button>
+          <Button size="sm" onClick={() => setNewOpen(true)}>
+            <Plus className="size-3.5 mr-1" /> New
+          </Button>
+        </div>
       </div>
 
       <div className="mb-6">
@@ -107,6 +114,7 @@ export default function ProjectsPage() {
       )}
 
       <NewProjectDialog open={newOpen} onOpenChange={setNewOpen} />
+      <NewFromTextDialog open={newFromTextOpen} onOpenChange={setNewFromTextOpen} />
     </div>
   );
 }

@@ -120,6 +120,30 @@ export type CreateFromSourceResponse = {
   execution: Execution | null;
 };
 
+/**
+ * Input for `POST /projects/from-text` — the YouTube-free entry point.
+ * The brief becomes the manim_prompt directly; no analyze step, no
+ * URL to download, no frames extraction.
+ */
+export type CreateFromTextInput = {
+  /** What the video should be about. Min 50 chars so plan_clips has
+   *  enough material to produce a real per-clip plan. */
+  brief: string;
+  /** Optional title; auto-derived from the first ~60 chars of brief
+   *  when omitted. */
+  title?: string | null;
+  /** Render options — same shape as CreateFromSourceInput. Omitted
+   *  fields fall back to the backend's Project defaults. */
+  orientation?: Orientation | null;
+  quality?: string | null;          // "480p" | "720p" | "1080p"
+  voiceover?: boolean | null;
+  voiceId?: string | null;
+  voiceGender?: string | null;
+  voiceAccent?: string | null;
+  targetDuration?: number | null;
+  maxClips?: number | null;
+};
+
 // ─── API ────────────────────────────────────────────────────────────────────
 
 export const projectsApi = {
@@ -134,6 +158,14 @@ export const projectsApi = {
    */
   fromSource: (input: CreateFromSourceInput) =>
     api.post<CreateFromSourceResponse>("/api/v1/projects/from-source", input),
+
+  /**
+   * Type a brief → kicks off GenerateVideoWorkflow directly (no analyze
+   * step). Returns 202 with just an Execution; navigate to
+   * `/projects/${execution.projectId}` once it lands.
+   */
+  fromText: (input: CreateFromTextInput) =>
+    api.post<Execution>("/api/v1/projects/from-text", input),
 
   list: (params?: { offset?: number; limit?: number; userId?: string }) => {
     const qs = new URLSearchParams();
