@@ -18,7 +18,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useSearchParams, Link } from "react-router-dom";
 import { Loader2, Send, Sparkles, Smartphone, Monitor, Workflow as WorkflowIcon } from "lucide-react";
 
-import { projectsApi, type Orientation, type ProjectDetail } from "@octoflash/core";
+import { resolveSignedUrl, type Orientation, type ProjectDetail } from "@octoflash/core";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -273,8 +273,29 @@ function FinalVideoTabs({ project }: { project: ProjectDetail }) {
   const initial: Orientation = hasPortrait ? "portrait" : "landscape";
   const [orientation, setOrientation] = useState<Orientation>(initial);
 
+  // Native <video> tags can't send Authorization headers, so the BE
+  // preview endpoint (which requires JWT) returns 404 for them. Resolve
+  // the redirect ourselves with auth and set <video src> to the final
+  // signed Supabase URL — which doesn't need auth.
   const bust = encodeURIComponent(project.updatedAt);
-  const src = `${projectsApi.previewUrl(project.id, orientation)}&t=${bust}`;
+  const previewPath = `/api/v1/projects/${project.id}/preview?orientation=${orientation}&t=${bust}`;
+  const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
+  const [resolveError, setResolveError] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setResolvedSrc(null);
+    setResolveError(null);
+    resolveSignedUrl(previewPath)
+      .then((url) => {
+        if (!cancelled) setResolvedSrc(url);
+      })
+      .catch((e) => {
+        if (!cancelled) setResolveError((e as Error).message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [previewPath]);
   const aspectClass = orientation === "portrait" ? "aspect-[9/16]" : "aspect-video";
 
   return (
@@ -295,13 +316,27 @@ function FinalVideoTabs({ project }: { project: ProjectDetail }) {
           </TabsList>
         </Tabs>
       )}
-      <video
-        key={`${orientation}-${project.updatedAt}`}
-        src={src}
-        controls
-        preload="metadata"
-        className={`w-full rounded-md border bg-black ${aspectClass}`}
-      />
+      {resolveError ? (
+        <div
+          className={`w-full rounded-md border bg-black text-white text-xs flex items-center justify-center ${aspectClass}`}
+        >
+          Couldn't load video: {resolveError}
+        </div>
+      ) : resolvedSrc ? (
+        <video
+          key={`${orientation}-${project.updatedAt}`}
+          src={resolvedSrc}
+          controls
+          preload="metadata"
+          className={`w-full rounded-md border bg-black ${aspectClass}`}
+        />
+      ) : (
+        <div
+          className={`w-full rounded-md border bg-black text-white text-xs flex items-center justify-center ${aspectClass}`}
+        >
+          Loading video…
+        </div>
+      )}
     </div>
   );
 }

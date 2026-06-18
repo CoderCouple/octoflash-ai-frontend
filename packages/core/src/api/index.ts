@@ -1,4 +1,4 @@
-export { api, ApiError, setAuthTokenGetter } from "./client.js";
+export { api, ApiError, resolveSignedUrl, setAuthTokenGetter } from "./client.js";
 
 export {
   contactApi,

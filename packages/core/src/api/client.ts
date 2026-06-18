@@ -51,6 +51,29 @@ async function _resolveAuthToken(): Promise<string | null> {
   }
 }
 
+/** Resolve a BE endpoint that 302s to a signed URL (e.g. `/preview`)
+ * into the final URL the browser can put straight into <video src>.
+ *
+ * Native <video> tags cannot send Authorization headers, so any BE
+ * endpoint behind JWT auth is unreachable to the player. The pattern
+ * we use: fetch the endpoint here with the Bearer token, let fetch
+ * auto-follow the redirect, then return `res.url` — the final Supabase
+ * signed URL, which does not require auth headers. */
+export async function resolveSignedUrl(path: string): Promise<string> {
+  const base = getRuntimeConfig().apiUrl;
+  const url = path.startsWith("http") ? path : `${base.replace(/\/$/, "")}${path}`;
+  const token = await _resolveAuthToken();
+  const res = await fetch(url, {
+    method: "GET",
+    headers: token ? { authorization: `Bearer ${token}` } : {},
+    redirect: "follow",
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, url, `resolveSignedUrl ${res.status}`);
+  }
+  return res.url;
+}
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,

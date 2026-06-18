@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
 import { useJobsStore } from "@/store/jobsStore";
 import { useProjectsStore } from "@/store/projectsStore";
-import { scenesApi, type SceneResponse } from "@octoflash/core";
+import { resolveSignedUrl, scenesApi, type SceneResponse } from "@octoflash/core";
 import { ClipStatusBadge } from "@/components/workflow/status-badge";
 
 const SAVE_DEBOUNCE_MS = 500;
@@ -93,8 +93,22 @@ export function ClipSidebar({ scene }: { scene: SceneResponse }) {
   }
 
   const regenInFlight = !!activeJob || scene.status === "scripting" || scene.status === "rendering";
-  // Cache-bust the per-clip <video> src whenever the scene updates.
-  const previewSrc = `${scenesApi.previewUrl(scene.id)}?t=${encodeURIComponent(scene.updatedAt)}`;
+  // Resolve the auth-required preview redirect into a signed URL the
+  // raw <video> tag can load (it can't send Bearer headers itself).
+  const previewPath = `/api/v1/scenes/${scene.id}/preview?t=${encodeURIComponent(scene.updatedAt)}`;
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setPreviewSrc(null);
+    resolveSignedUrl(previewPath)
+      .then((url) => {
+        if (!cancelled) setPreviewSrc(url);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [previewPath]);
 
   return (
     <div className="h-full flex flex-col">
@@ -125,7 +139,7 @@ export function ClipSidebar({ scene }: { scene: SceneResponse }) {
       {/* ── Scrollable body ─────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* Video player — shows the clip's MP4 or status placeholder. */}
-        {scene.videoUrl ? (
+        {scene.videoUrl && previewSrc ? (
           <video
             key={scene.updatedAt}
             src={previewSrc}
