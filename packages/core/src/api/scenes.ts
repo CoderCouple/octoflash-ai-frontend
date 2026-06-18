@@ -1,111 +1,96 @@
 /**
- * Scene + scene-level endpoints (variations, select).
+ * Scene (= clip) endpoints.
  *
- * NL editing endpoints (/instruct, /collapse, /discard, /instructions) live
- * in a separate `instructions.ts` so callers can ignore them when not needed.
+ * One Scene = one Manim render = one MP4. The final video is the ordered
+ * concat of all Scenes for a project. Editing a single Scene's prompt and
+ * calling `regenerate(id)` re-renders just that clip + auto-restitches the
+ * project — that's the atomic re-render invariant.
+ *
+ * Polling pattern: after `regenerate`, watch the returned Job; when it flips
+ * to `done`, re-fetch `GET /scenes/{id}` to see the new `videoUrl` and use
+ * `previewUrl(id)` to load the MP4 in a `<video>` element.
  */
 
+import { getRuntimeConfig } from "../config.js";
 import { api } from "./client.js";
-import type { Job } from "./jobs.js";
+import type { Execution } from "./executions.js";
+import type { Orientation } from "./projects.js";
+
+export type SceneStatus = "draft" | "scripting" | "rendering" | "ready" | "failed";
 
 export type SceneResponse = {
   id: string;
   projectId: string;
-  n: number;
+  /** Which orientation this scene belongs to — scenes are now uniquely
+   * keyed by (project, orientation, n), so one project can have parallel
+   * portrait + landscape sets. */
+  orientation: Orientation;
+  n: number; // 1-indexed position in the final video
+
   title: string | null;
-  template: string;
-  params: Record<string, unknown>;
-  prompt: string | null;
-  duration: number | null;
-  style: string | null;
-  motion: string | null;
-  status: string;
-  selectedVariationId: string | null;
-  extraSteps: Record<string, unknown>[];
-  mode: "structured" | "advanced";
+  prompt: string | null; // creative direction for this clip
+  duration: number | null; // target seconds
+
+  // Per-clip script + voice
+  scriptCode: string | null;
+  scriptFile: string | null; // path on disk
+  scriptCodeHash: string | null; // sha256; skip-if-unchanged cache key
+  voiceIdOverride: string | null; // null = inherit Project.voiceId
+
+  // Render output
+  videoUrl: string | null;
+  renderMethod: string | null; // which fallback-chain path produced the MP4
+  evalScore: number | null; // 0-10 vision-eval score
+  evalFeedback: string | null;
+
+  status: SceneStatus;
   createdAt: string;
   updatedAt: string;
 };
 
-export type VariationResponse = {
-  id: string;
-  sceneId: string;
-  paramsSnapshot: Record<string, unknown>;
-  videoUrl: string | null;
-  audioUrl: string | null;
-  duration: number | null;
-  frameCount: number | null;
-  fileSize: number | null;
-  status: string;
-  renderedAt: string | null;
-  createdAt: string;
-};
-
 export type CreateSceneInput = {
-  template: string;
   title?: string | null;
   prompt?: string | null;
-  params?: Record<string, unknown>;
   duration?: number | null;
-  style?: string | null;
-  motion?: string | null;
   /** Explicit ordering; defaults to next available slot. */
   n?: number | null;
 };
 
 export type UpdateSceneInput = {
   title?: string | null;
-  template?: string;
   prompt?: string | null;
-  params?: Record<string, unknown>;
   duration?: number | null;
-  style?: string | null;
-  motion?: string | null;
-};
-
-export type GenerateVariationsInput = {
-  n?: number;
-  seed?: number | null;
 };
 
 export const scenesApi = {
-  // ─── Scene CRUD (rooted under a project for create) ─────────────────────
+  // ─── Scene CRUD ─────────────────────────────────────────────────────────
   create: (projectId: string, input: CreateSceneInput) =>
     api.post<SceneResponse>(`/api/v1/projects/${projectId}/scenes`, input),
 
-  patch: (
-    sceneId: string,
-    input: UpdateSceneInput,
-    opts?: { force?: boolean },
-  ) => {
-    const qs = opts?.force ? "?force=true" : "";
-    return api.patch<SceneResponse>(`/api/v1/scenes/${sceneId}${qs}`, input);
-  },
+  get: (sceneId: string) => api.get<SceneResponse>(`/api/v1/scenes/${sceneId}`),
+
+  patch: (sceneId: string, input: UpdateSceneInput) =>
+    api.patch<SceneResponse>(`/api/v1/scenes/${sceneId}`, input),
 
   delete: (sceneId: string) => api.del<void>(`/api/v1/scenes/${sceneId}`),
 
-  // ─── Variations under a scene ───────────────────────────────────────────
-  generateVariations: (sceneId: string, input: GenerateVariationsInput = {}) =>
-    api.post<Job>(`/api/v1/scenes/${sceneId}/variations`, {
-      n: input.n ?? 4,
-      seed: input.seed ?? null,
-    }),
+  // ─── Atomic per-clip re-render ──────────────────────────────────────────
+  /**
+   * Kick off RegenerateClipWorkflow — re-renders just this clip (skip-if-
+   * unchanged guard applies based on `scriptCodeHash`) + auto-restitches
+   * the orientation-specific final video. Typical flow: PATCH /scenes/{id}
+   * to edit the prompt, then call this. Returns 202 + Execution; poll at
+   * /executions/{id} until done.
+   */
+  regenerate: (sceneId: string) =>
+    api.post<Execution>(`/api/v1/scenes/${sceneId}/regenerate`, {}),
 
-  listVariations: (sceneId: string) =>
-    api.get<VariationResponse[]>(`/api/v1/scenes/${sceneId}/variations`),
-
-  selectVariation: (sceneId: string, variationId: string) =>
-    api.patch<SceneResponse>(`/api/v1/scenes/${sceneId}/select-variation`, {
-      variationId,
-    }),
-};
-
-// ─── Standalone variation operations ────────────────────────────────────────
-
-export const variationsApi = {
-  /** Re-render an existing variation (optionally with overridden params). */
-  rerender: (variationId: string, paramsOverride?: Record<string, unknown>) =>
-    api.post<Job>(`/api/v1/variations/${variationId}/render`, {
-      paramsOverride: paramsOverride ?? null,
-    }),
+  // ─── Per-clip preview URL (for <video src>) ─────────────────────────────
+  /**
+   * Absolute URL of the clip's MP4. Returns 404 if `videoUrl` isn't set yet
+   * (clip is still draft/scripting/rendering or render failed). Use as the
+   * `src` attribute of a `<video>` element in the workflow DAG nodes.
+   */
+  previewUrl: (sceneId: string): string =>
+    `${getRuntimeConfig().apiUrl.replace(/\/$/, "")}/api/v1/scenes/${sceneId}/preview`,
 };

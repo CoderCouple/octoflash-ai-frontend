@@ -4,12 +4,12 @@
  *
  *   web build : import.meta.env.VITE_API_URL  (Vite injects at build time)
  *   desktop   : window.octoflash.config.apiUrl  (set by Electron main → preload)
- *   fallback  : http://localhost:8000           (local FastAPI dev default)
+ *   fallback  : http://localhost:8008           (local FastAPI dev default)
  *
  * Resolution is lazy so tests can monkey-patch globalThis before importing.
  */
 
-export const DEFAULT_API_URL = "http://localhost:8000";
+export const DEFAULT_API_URL = "http://localhost:8008";
 
 export type RuntimeConfig = {
   apiUrl: string;

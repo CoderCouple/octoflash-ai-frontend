@@ -11,7 +11,7 @@
 // presentational components in `components/editor/`.
 
 export type SceneKind = "title" | "grid" | "warp" | "orbit";
-export type SceneStatus = "ready" | "generating" | "failed" | "queued";
+export type LegacySceneStatus = "ready" | "generating" | "failed" | "queued";
 
 export type TemplateId =
   // Text & titles
@@ -84,7 +84,7 @@ export type Scene = {
   style: StyleId;
   /** 0..1 — drives the manic-ness presets. */
   motion: number;
-  status: SceneStatus;
+  status: LegacySceneStatus;
   /** Which variation index is currently selected (0..3). */
   selectedVariation: number;
   /** Main text rendered in this scene. */
