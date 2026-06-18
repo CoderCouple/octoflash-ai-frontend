@@ -38,6 +38,13 @@ export default function ProjectOverviewPage() {
   const { id } = useParams<{ id: string }>();
   const { currentProject, loading, error, openProject } = useProjectsStore();
   const startGenerate = useJobsStore((s) => s.startGenerate);
+  // Watch jobsStore for any in-flight generate execution against this
+  // project. Closes the race window where the project row still says
+  // `analyzed` (workflow's first activity hasn't fired yet) but a
+  // generate is already running. With the BE idempotency in place
+  // (commit 2bcc493) a duplicate click is harmless, but we still want
+  // the button to reflect reality.
+  const jobs = useJobsStore((s) => s.jobs);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
@@ -100,6 +107,15 @@ export default function ProjectOverviewPage() {
   }
 
   const p = currentProject;
+  // True when jobsStore holds any in-flight generate execution for
+  // this project — covers the race between from-text returning
+  // status=analyzed and the workflow's first activity flipping it.
+  const generateInFlight = Object.values(jobs).some(
+    (e) =>
+      e.projectId === p.id &&
+      e.kind === "generate" &&
+      (e.status === "RUNNING" || e.status === "PENDING"),
+  );
   const canGenerate = p.status === "analyzed" || p.status === "generated" || p.status === "failed";
   // Backend now stores two final URLs (one per orientation). Prefer portrait
   // since most projects are vertical-first; fall back to landscape if only
@@ -130,9 +146,9 @@ export default function ProjectOverviewPage() {
           <Button
             size="sm"
             onClick={onGenerate}
-            disabled={!canGenerate || generating || p.status === "generating"}
+            disabled={!canGenerate || generating || p.status === "generating" || generateInFlight}
           >
-            {generating || p.status === "generating" ? (
+            {generating || p.status === "generating" || generateInFlight ? (
               <>
                 <Loader2 className="size-3.5 mr-1.5 animate-spin" />
                 Generating…

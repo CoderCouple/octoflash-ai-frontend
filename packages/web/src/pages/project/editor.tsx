@@ -66,6 +66,7 @@ export default function ProjectEditorPage() {
   const { id } = useParams<{ id: string }>();
   const { currentProject, loading, error, openProject } = useProjectsStore();
   const startGenerate = useJobsStore((s) => s.startGenerate);
+  const jobs = useJobsStore((s) => s.jobs);
   const [selectedNode, setSelectedNode] = useState<SelectedNode>(null);
   const [generating, setGenerating] = useState(false);
   /** Collapsed = thin rail with expand button; open = full 380px ClipSidebar. */
@@ -139,6 +140,14 @@ export default function ProjectEditorPage() {
   })();
   const canGenerate =
     p.status === "analyzed" || p.status === "generated" || p.status === "failed";
+  // Mirrors the project page: catch the race where the row still says
+  // `analyzed` but a generate execution is already running for it.
+  const generateInFlight = Object.values(jobs).some(
+    (e) =>
+      e.projectId === p.id &&
+      e.kind === "generate" &&
+      (e.status === "RUNNING" || e.status === "PENDING"),
+  );
 
   return (
     // ReactFlowProvider lifted to here so the JSON panel can share React
@@ -179,9 +188,9 @@ export default function ProjectEditorPage() {
             size="sm"
             className="h-7"
             onClick={onGenerate}
-            disabled={!canGenerate || generating || p.status === "generating"}
+            disabled={!canGenerate || generating || p.status === "generating" || generateInFlight}
           >
-            {generating || p.status === "generating" ? (
+            {generating || p.status === "generating" || generateInFlight ? (
               <>
                 <Loader2 className="size-3.5 mr-1 animate-spin" />
                 Generating…

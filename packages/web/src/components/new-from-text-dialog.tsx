@@ -19,6 +19,7 @@ import { useNavigate } from "react-router-dom";
 
 import { projectsApi, voicesApi, type Voice, type Orientation } from "@octoflash/core";
 
+import { useJobsStore } from "@/store/jobsStore";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -67,6 +68,11 @@ const MIN_BRIEF_CHARS = 50;
 
 export function NewFromTextDialog({ open, onOpenChange }: Props) {
   const navigate = useNavigate();
+  // Stash the returned execution into jobsStore so the editor / project
+  // pages can see "generate already running" the instant we redirect to
+  // /projects/{id} — otherwise their Generate button momentarily lights
+  // up because project.status is still `analyzed`.
+  const trackExecution = useJobsStore((s) => s.track);
   const [form, setForm] = useState<Form>(DEFAULT_FORM);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -136,7 +142,7 @@ export function NewFromTextDialog({ open, onOpenChange }: Props) {
     setBusy(true);
     setErr(null);
     try {
-      const execution = await projectsApi.fromText({
+      const execution: import("@octoflash/core").Execution = await projectsApi.fromText({
         brief: form.brief.trim(),
         title: form.title.trim() || null,
         orientation: form.orientation,
@@ -147,6 +153,12 @@ export function NewFromTextDialog({ open, onOpenChange }: Props) {
         voiceAccent: form.voiceAccent || null,
         voiceId: form.voiceId || null,
       });
+      // Stash the execution + start polling so the project page
+      // immediately sees a RUNNING generate (closes the race against
+      // project.status = "analyzed" before the workflow's first
+      // activity fires).
+      useJobsStore.setState((s) => ({ jobs: { ...s.jobs, [execution.id]: execution } }));
+      trackExecution(execution.id);
       onOpenChange(false);
       // BE populates projectId on the execution response so we can
       // jump straight to the project page. Falls back to /projects if
