@@ -26,6 +26,15 @@
       ],
       "js": ["content-script.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://www.youtube.com/*",
+        "*://m.youtube.com/*",
+        "*://youtu.be/*"
+      ],
+      "js": ["ingest-youtube.js"],
+      "run_at": "document_idle"
     }
   ],
   "action": {

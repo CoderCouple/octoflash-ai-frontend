@@ -21,6 +21,9 @@ const els = {
   length: document.getElementById("length"),
   ytStatus: document.getElementById("ytStatus"),
   connectYtBtn: document.getElementById("connectYtBtn"),
+  localIngestBtn: document.getElementById("localIngestBtn"),
+  localIngestStatus: document.getElementById("localIngestStatus"),
+  localIngestHint: document.getElementById("localIngestHint"),
 };
 
 // Load persisted settings.
@@ -177,3 +180,54 @@ els.connectYtBtn.addEventListener("click", () => {
 });
 
 refreshYtStatus();
+
+// ─── Local ingest ────────────────────────────────────────────────────
+
+function setLocalStatus(msg, type = "") {
+  els.localIngestStatus.textContent = msg || "";
+  els.localIngestStatus.className = msg ? `status ${type || "success"}` : "status";
+}
+
+// Background broadcasts progress events as the orchestrator walks
+// through transcript → frames → upload. Show them inline.
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg?.type === "octoflash:ingest-progress" && typeof msg.message === "string") {
+    setLocalStatus(msg.message, "success");
+  }
+});
+
+els.localIngestBtn.addEventListener("click", () => {
+  els.localIngestBtn.disabled = true;
+  els.localIngestBtn.textContent = "Ingesting…";
+  setLocalStatus("Starting…", "success");
+  const opts = {
+    quality: els.quality.value,
+    orientation: els.orientation.value,
+    voiceover: els.voiceover.value === "yes",
+    target_duration: Number(els.length.value),
+  };
+  chrome.runtime.sendMessage(
+    {
+      type: "octoflash:ingest-current-youtube-tab",
+      maxFrames: 10,
+      ingestOptions: opts,
+    },
+    (res) => {
+      els.localIngestBtn.disabled = false;
+      els.localIngestBtn.textContent = "Ingest from this tab";
+      if (chrome.runtime.lastError || !res) {
+        setLocalStatus(chrome.runtime.lastError?.message || "Ingest failed.", "error");
+        return;
+      }
+      if (!res.ok) {
+        setLocalStatus(res.error || "Ingest failed.", "error");
+        return;
+      }
+      const note = res.tainted ? " (poster fallback — DRM)" : "";
+      setLocalStatus(
+        `Ingested ${res.frameCount} frames + ${res.transcriptChars} transcript chars${note}. Project ${res.projectId}.`,
+        "success",
+      );
+    },
+  );
+});

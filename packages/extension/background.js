@@ -135,6 +135,17 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     })();
     return true; // keep channel open for async sendResponse
   }
+  if (msg?.type === "octoflash:ingest-current-youtube-tab") {
+    (async () => {
+      try {
+        const out = await runLocalIngest(msg.options || {});
+        sendResponse({ ok: true, ...out });
+      } catch (err) {
+        sendResponse({ ok: false, error: err?.message || String(err) });
+      }
+    })();
+    return true;
+  }
   if (msg?.type === "octoflash:get-status") {
     (async () => {
       const { authToken, authTokenUpdatedAt, cookiesSyncedAt, cookiesCount } =
@@ -245,4 +256,138 @@ function toNetscapeCookiesTxt(cookies) {
     );
   }
   return lines.join("\n") + "\n";
+}
+
+// ─── local YouTube ingest orchestrator ───────────────────────────────
+// Side panel triggers this when the user clicks "Ingest from this tab".
+// We ask the YouTube content script for transcript + sampled frames, then
+// POST the bundle to /api/v1/projects/from-local-ingest. Sends per-step
+// progress events back to the side panel via chrome.runtime.sendMessage
+// so the UI can show "Extracting transcript… / Capturing N frames… / Uploading…".
+
+const YT_HOST_RE = /^(?:https?:\/\/)?(?:www\.|m\.)?(?:youtube\.com|youtu\.be)\//;
+
+async function runLocalIngest({ maxFrames = 10, ingestOptions = {} } = {}) {
+  const { authToken } = await chrome.storage.local.get(["authToken"]);
+  if (!authToken) {
+    throw new Error(
+      "Not signed in to Octoflash. Open the Octoflash web app in another tab and sign in.",
+    );
+  }
+
+  // 1. Find the active YouTube tab.
+  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  const tab = tabs[0];
+  if (!tab?.url || !YT_HOST_RE.test(tab.url)) {
+    throw new Error("Active tab is not a YouTube page. Open the video first.");
+  }
+
+  publishProgress("Reading captions…");
+  const meta = await sendToTab(tab.id, {
+    type: "octoflash-ingest:extract-transcript",
+  });
+  if (!meta?.ok) {
+    throw new Error(meta?.error || "Couldn't read captions from the page.");
+  }
+
+  publishProgress(`Sampling up to ${maxFrames} frames…`);
+  const framesRes = await sendToTab(
+    tab.id,
+    { type: "octoflash-ingest:capture-frames", maxFrames },
+  );
+  if (!framesRes?.ok) {
+    throw new Error(framesRes?.error || "Frame capture failed.");
+  }
+
+  // Poster-fallback: when the canvas was tainted (DRM), the content
+  // script returned a {poster_url} marker. Convert it to base64 here so
+  // the BE schema (image_base64 / data_url) is satisfied.
+  const frames = await Promise.all(
+    (framesRes.frames || []).map(async (f) => {
+      if (f.source === "poster" && f.poster_url && !f.data_url && !f.image_base64) {
+        try {
+          const b64 = await fetchAsBase64(f.poster_url);
+          return { source: "poster", image_base64: b64, captured_at: 0 };
+        } catch {
+          return null;
+        }
+      }
+      return f;
+    }),
+  );
+  const cleanFrames = frames.filter(Boolean);
+
+  // 2. POST the bundle.
+  publishProgress("Uploading to Octoflash…");
+  const { apiUrl } = await chrome.storage.sync.get({ apiUrl: DEFAULT_API_URL });
+  const body = {
+    source_url: tab.url,
+    title: meta.title || null,
+    transcript: meta.transcript || "",
+    source_duration: meta.duration || null,
+    frames: cleanFrames,
+    ...ingestOptions,
+  };
+  const res = await fetch(`${apiUrl}/api/v1/projects/from-local-ingest`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${authToken}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || err.detail || `HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  const projectId = data?.result?.id ?? data?.id ?? "unknown";
+  publishProgress(`Done — project ${projectId}.`);
+  return {
+    projectId,
+    transcriptChars: (meta.transcript || "").length,
+    frameCount: cleanFrames.length,
+    tainted: framesRes.tainted === true,
+  };
+}
+
+function publishProgress(message) {
+  // Fire-and-forget broadcast. Side panel (if open) hears it; nobody
+  // else cares.
+  try {
+    chrome.runtime
+      .sendMessage({ type: "octoflash:ingest-progress", message })
+      .catch(() => {});
+  } catch {
+    // Service worker may not allow promise-style; swallow.
+  }
+}
+
+function sendToTab(tabId, message) {
+  return new Promise((resolve) => {
+    chrome.tabs.sendMessage(tabId, message, (response) => {
+      if (chrome.runtime.lastError) {
+        resolve({ ok: false, error: chrome.runtime.lastError.message });
+      } else {
+        resolve(response);
+      }
+    });
+  });
+}
+
+async function fetchAsBase64(url) {
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`poster HTTP ${resp.status}`);
+  const blob = await resp.blob();
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = String(reader.result || "");
+      // result is `data:image/jpeg;base64,XXX` — strip the prefix.
+      const comma = result.indexOf(",");
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.onerror = () => reject(reader.error || new Error("FileReader failed"));
+    reader.readAsDataURL(blob);
+  });
 }

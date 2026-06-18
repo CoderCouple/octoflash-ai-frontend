@@ -179,6 +179,16 @@
     <div class="status" id="status"></div>
 
     <div class="section">
+      <div class="section-title">Local Ingest (recommended)</div>
+      <div class="hint" id="localIngestHint" style="margin-top: 4px;">
+        Open a YouTube video in the active tab, then click below. Captions + frames are
+        captured in your browser — bypasses YouTube's bot checks on the server.
+      </div>
+      <button id="localIngestBtn">Ingest from this tab</button>
+      <div class="status" id="localIngestStatus"></div>
+    </div>
+
+    <div class="section">
       <div class="section-title">YouTube Connection</div>
       <div class="hint" id="ytStatus" style="margin-top: 4px;">Checking…</div>
       <button class="save-btn" id="connectYtBtn">Sync YouTube cookies</button>
