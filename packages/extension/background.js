@@ -283,11 +283,7 @@ async function runLocalIngest({ maxFrames = 10, ingestOptions = {} } = {}) {
   }
 
   publishProgress("Reading captions…");
-  const meta = await sendToTabWithInject(
-    tab.id,
-    { type: "octoflash-ingest:extract-transcript" },
-    "ingest-youtube.js",
-  );
+  const meta = await extractYouTubeTranscript(tab.id);
   if (!meta?.ok) {
     throw new Error(meta?.error || "Couldn't read captions from the page.");
   }
@@ -406,6 +402,102 @@ async function sendToTabWithInject(tabId, message, scriptFile) {
     return { ok: false, error: `inject ${scriptFile} failed: ${e?.message || e}` };
   }
   return await sendToTab(tabId, message);
+}
+
+/** Pull `ytInitialPlayerResponse` from a YouTube tab's MAIN world.
+ * Content scripts run in an isolated world and an inline injected
+ * <script> is blocked by YouTube's strict CSP, so we use
+ * chrome.scripting.executeScript with world:"MAIN" instead. */
+async function getYouTubePlayerResponse(tabId) {
+  if (!chrome.scripting?.executeScript) {
+    throw new Error("chrome.scripting unavailable (need MV3 + scripting perm)");
+  }
+  const results = await chrome.scripting.executeScript({
+    target: { tabId },
+    world: "MAIN",
+    func: () => {
+      try {
+        const pr =
+          window.ytInitialPlayerResponse ||
+          (window.ytplayer?.config?.args?.raw_player_response &&
+            JSON.parse(window.ytplayer.config.args.raw_player_response)) ||
+          null;
+        if (!pr) return { ok: false, error: "no ytInitialPlayerResponse on window" };
+        // Strip down to just what we need — the full object can be huge
+        // and structured-clone of the whole thing is wasteful.
+        return {
+          ok: true,
+          captions: pr.captions?.playerCaptionsTracklistRenderer?.captionTracks || [],
+          videoDetails: {
+            title: pr.videoDetails?.title || null,
+            author: pr.videoDetails?.author || null,
+            videoId: pr.videoDetails?.videoId || null,
+            lengthSeconds: pr.videoDetails?.lengthSeconds
+              ? Number(pr.videoDetails.lengthSeconds)
+              : null,
+          },
+        };
+      } catch (e) {
+        return { ok: false, error: String(e) };
+      }
+    },
+  });
+  return results?.[0]?.result || { ok: false, error: "no MAIN-world result" };
+}
+
+function pickCaptionTrack(tracks, prefer) {
+  if (!Array.isArray(tracks) || tracks.length === 0) return null;
+  const want = (prefer || "en").slice(0, 2).toLowerCase();
+  const byLang = (lang) =>
+    tracks.find((t) => (t.languageCode || "").toLowerCase().startsWith(lang));
+  return byLang(want) || byLang("en") || tracks[0];
+}
+
+async function extractYouTubeTranscript(tabId) {
+  let player;
+  try {
+    player = await getYouTubePlayerResponse(tabId);
+  } catch (e) {
+    return { ok: false, error: e?.message || String(e) };
+  }
+  if (!player.ok) return { ok: false, error: player.error };
+
+  const meta = player.videoDetails || {};
+  const track = pickCaptionTrack(player.captions, navigator.language);
+  if (!track) {
+    return {
+      ok: true,
+      transcript: "",
+      missing: true,
+      title: meta.title,
+      duration: meta.lengthSeconds,
+      video_id: meta.videoId,
+    };
+  }
+  try {
+    const url = new URL(track.baseUrl);
+    url.searchParams.set("fmt", "json3");
+    const resp = await fetch(url.toString(), { credentials: "include" });
+    if (!resp.ok) throw new Error(`timedtext HTTP ${resp.status}`);
+    const data = await resp.json();
+    const out = [];
+    for (const ev of data?.events || []) {
+      for (const seg of ev.segs || []) {
+        const t = seg.utf8;
+        if (t && t !== "\n") out.push(t);
+      }
+    }
+    return {
+      ok: true,
+      transcript: out.join(" ").replace(/\s+/g, " ").trim(),
+      language: track.languageCode || null,
+      title: meta.title,
+      duration: meta.lengthSeconds,
+      video_id: meta.videoId,
+    };
+  } catch (e) {
+    return { ok: false, error: `timedtext fetch failed: ${e?.message || e}` };
+  }
 }
 
 async function fetchAsBase64(url) {

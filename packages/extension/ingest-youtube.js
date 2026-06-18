@@ -1,112 +1,22 @@
 // Octoflash YouTube ingest — content script.
 //
-// Runs on every youtube.com page. Listens for two requests from the
+// Runs on every youtube.com page. Handles ONE request from the
 // extension's background worker:
 //
-//   1. octoflash-ingest:extract-transcript
-//        Pulls caption tracks from the page's ytInitialPlayerResponse
-//        (the same JSON the YouTube player itself reads from), fetches
-//        the timedtext endpoint with the user's signed-in session
-//        cookies, and returns a plain-text transcript.
+//   octoflash-ingest:capture-frames
+//     Finds the <video> element, pauses it, seeks to N evenly-spaced
+//     timestamps, draws each frame onto a canvas, and toDataURL()s
+//     the result. Returns an array of JPEG data URLs.
+//     On a tainted-canvas SecurityError (DRM, COEP, etc.), bails out
+//     with `{ tainted: true }` so the background can fall back to the
+//     YouTube poster thumbnail.
 //
-//   2. octoflash-ingest:capture-frames
-//        Finds the <video> element, pauses it, seeks to N evenly-spaced
-//        timestamps, draws each frame onto a canvas, and toDataURL()s
-//        the result. Returns an array of JPEG data URLs.
-//        On a tainted-canvas SecurityError (DRM, COEP, etc.), bails out
-//        with `{ tainted: true }` so the background can fall back to the
-//        YouTube poster thumbnail.
-//
-// Both handlers are sync-respond compatible — they always sendResponse
-// once and return `true` to keep the channel open for async work.
-//
-// The content script never touches the network for anything but the
-// timedtext request; the actual upload to the Octoflash backend happens
-// in the background service worker so it can use chrome.storage.local
-// for the Supabase JWT.
+// Transcript extraction used to live here, but YouTube's CSP blocks the
+// inline-script trick needed to read window.ytInitialPlayerResponse from
+// the page's MAIN world. The background now uses
+// chrome.scripting.executeScript({world:"MAIN", func:…}) for that.
 
 (function () {
-  // ── transcript ───────────────────────────────────────────────────
-
-  /** Pull ytInitialPlayerResponse from the page's MAIN world. Content
-   * scripts run in an isolated world so we can't reach `window.ytInitialPlayerResponse`
-   * directly; inject a <script> that posts the JSON back via DOM, then
-   * read it. */
-  function readPlayerResponse() {
-    return new Promise((resolve) => {
-      const slotId = "octoflash-player-slot";
-      let slot = document.getElementById(slotId);
-      if (!slot) {
-        slot = document.createElement("script");
-        slot.id = slotId;
-        slot.textContent = `
-          (function () {
-            const send = (payload) => {
-              const el = document.getElementById('octoflash-player-slot');
-              if (el) el.dataset.payload = JSON.stringify(payload || null);
-            };
-            try {
-              const pr = window.ytInitialPlayerResponse
-                || (window.ytplayer && window.ytplayer.config && window.ytplayer.config.args
-                    && window.ytplayer.config.args.raw_player_response);
-              send(pr || null);
-            } catch (e) {
-              send({ __error: String(e) });
-            }
-          })();
-        `;
-        document.documentElement.appendChild(slot);
-      } else {
-        // Re-evaluate the script if the slot already exists (SPA navigation).
-        // Recreating it forces re-execution.
-        slot.remove();
-        readPlayerResponse().then(resolve);
-        return;
-      }
-      // Read the JSON we just injected.
-      const raw = slot.dataset.payload;
-      try {
-        resolve(raw ? JSON.parse(raw) : null);
-      } catch {
-        resolve(null);
-      }
-    });
-  }
-
-  /** Given the player JSON, pick the best caption track URL. Prefers
-   * the user's preferred language (UI locale), then English, then the
-   * first available track. */
-  function pickCaptionTrack(playerResponse) {
-    const tracks = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
-    if (!Array.isArray(tracks) || tracks.length === 0) return null;
-    const prefer = (navigator.language || "en").slice(0, 2).toLowerCase();
-    const byLang = (lang) =>
-      tracks.find((t) => (t.languageCode || "").toLowerCase().startsWith(lang));
-    return byLang(prefer) || byLang("en") || tracks[0];
-  }
-
-  /** Fetch the timedtext endpoint and convert the XML caption blob to
-   * plain text. YouTube serves these as XML with <text> nodes; we just
-   * decode entities and join. */
-  async function fetchTranscript(captionTrack) {
-    // Force JSON format — easier than XML parsing.
-    const url = new URL(captionTrack.baseUrl);
-    url.searchParams.set("fmt", "json3");
-    const resp = await fetch(url.toString(), { credentials: "include" });
-    if (!resp.ok) throw new Error(`timedtext HTTP ${resp.status}`);
-    const data = await resp.json();
-    const events = data?.events || [];
-    const out = [];
-    for (const ev of events) {
-      const segs = ev.segs || [];
-      for (const seg of segs) {
-        const t = seg.utf8;
-        if (t && t !== "\n") out.push(t);
-      }
-    }
-    return out.join(" ").replace(/\s+/g, " ").trim();
-  }
-
   // ── frames ───────────────────────────────────────────────────────
 
   function findVideoElement() {
@@ -219,37 +129,6 @@
   // ── message bus ──────────────────────────────────────────────────
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (msg?.type === "octoflash-ingest:extract-transcript") {
-      (async () => {
-        try {
-          const pr = await readPlayerResponse();
-          if (!pr) {
-            sendResponse({ ok: false, error: "Couldn't read player response from page" });
-            return;
-          }
-          const track = pickCaptionTrack(pr);
-          if (!track) {
-            sendResponse({ ok: true, transcript: "", missing: true });
-            return;
-          }
-          const transcript = await fetchTranscript(track);
-          const meta = pr.videoDetails || {};
-          sendResponse({
-            ok: true,
-            transcript,
-            language: track.languageCode || null,
-            title: meta.title || null,
-            channel: meta.author || null,
-            duration: meta.lengthSeconds ? Number(meta.lengthSeconds) : null,
-            video_id: meta.videoId || videoIdFromUrl(),
-          });
-        } catch (e) {
-          sendResponse({ ok: false, error: String(e) });
-        }
-      })();
-      return true;
-    }
-
     if (msg?.type === "octoflash-ingest:capture-frames") {
       (async () => {
         try {
