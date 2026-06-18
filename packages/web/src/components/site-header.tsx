@@ -5,11 +5,15 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useLocation } from "react-router-dom";
 
+// Prefixed-UUID shape used by the backend (e.g. prj_xxx, scn_xxx, workflow_xxx).
+// Breadcrumbs should leave these lowercase rather than turn them into "Prj_…".
+const ID_LIKE = /^[a-z][a-z0-9_]*_[a-z0-9-]+$/i;
+
 export function SiteHeader({ onOpenCmd }: { onOpenCmd: () => void }) {
   const { pathname } = useLocation();
   const segments = pathname.split("/").filter(Boolean);
   const crumbs = ["Workspace", ...(segments.length ? segments : ["videos"])].map(
-    (s) => s.charAt(0).toUpperCase() + s.slice(1)
+    (s) => (ID_LIKE.test(s) ? s : s.charAt(0).toUpperCase() + s.slice(1)),
   );
 
   return (
@@ -42,7 +46,7 @@ export function SiteHeader({ onOpenCmd }: { onOpenCmd: () => void }) {
         className="min-w-[240px] justify-between text-muted-foreground font-normal"
       >
         <span className="inline-flex items-center gap-2">
-          <Search className="size-3.5" /> Search videos, channels…
+          <Search className="size-3.5" /> Search videos, sources…
         </span>
         <kbd className="ml-2 inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px]">
           <span className="text-xs">⌘</span>K

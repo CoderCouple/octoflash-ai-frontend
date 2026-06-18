@@ -8,6 +8,7 @@ import {
   TEMPLATE_CATEGORY_LABELS,
   TEMPLATE_CATEGORY_ORDER,
   type TemplateSummary,
+  type TemplateId,
 } from "@octoflash/core";
 import { useTemplatesStore } from "@/store/templatesStore";
 import { TemplateGlyph } from "@/components/editor/template-glyph";
@@ -175,7 +176,7 @@ function TemplateCard({ t }: { t: TemplateSummary }) {
     >
       <div className="relative h-[84px] flex items-center justify-center bg-muted/50 border-b">
         <div className="scale-[2.2] text-foreground">
-          <TemplateGlyph id={t.glyph} />
+          <TemplateGlyph id={t.glyph as TemplateId} />
         </div>
         {t.manicCompatible && (
           <span

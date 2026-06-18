@@ -44,9 +44,8 @@ interface ProjectsActions {
 
   // ─── Scenes within currentProject ──────────────────────────────────────
   addScene(input: CreateSceneInput): Promise<SceneResponse>;
-  patchScene(sceneId: string, patch: UpdateSceneInput, force?: boolean): Promise<SceneResponse>;
+  patchScene(sceneId: string, patch: UpdateSceneInput): Promise<SceneResponse>;
   removeScene(sceneId: string): Promise<void>;
-  selectVariation(sceneId: string, variationId: string): Promise<SceneResponse>;
 }
 
 export const useProjectsStore = create<ProjectsState & ProjectsActions>(
@@ -120,8 +119,8 @@ export const useProjectsStore = create<ProjectsState & ProjectsActions>(
       return scene;
     },
 
-    async patchScene(sceneId, patch, force) {
-      const updated = await scenesApi.patch(sceneId, patch, { force });
+    async patchScene(sceneId, patch) {
+      const updated = await scenesApi.patch(sceneId, patch);
       set((s) => ({
         currentProject: s.currentProject
           ? {
@@ -145,21 +144,6 @@ export const useProjectsStore = create<ProjectsState & ProjectsActions>(
             }
           : null,
       }));
-    },
-
-    async selectVariation(sceneId, variationId) {
-      const updated = await scenesApi.selectVariation(sceneId, variationId);
-      set((s) => ({
-        currentProject: s.currentProject
-          ? {
-              ...s.currentProject,
-              scenes: s.currentProject.scenes.map((sc) =>
-                sc.id === sceneId ? updated : sc,
-              ),
-            }
-          : null,
-      }));
-      return updated;
     },
   }),
 );

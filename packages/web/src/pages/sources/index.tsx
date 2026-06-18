@@ -2,29 +2,29 @@ import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { Loader2, Plus } from "lucide-react";
 
-import { useChannelsStore } from "@/store/channelsStore";
+import { useSourcesStore } from "@/store/sourcesStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-export default function ChannelsIndex() {
-  const { channels, loading, syncing, error, loadChannels, createAndSync } =
-    useChannelsStore();
+export default function SourcesIndex() {
+  const { sources, loading, syncing, error, loadSources, createAndSync } =
+    useSourcesStore();
   const [url, setUrl] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
 
   useEffect(() => {
-    void loadChannels();
-  }, [loadChannels]);
+    void loadSources();
+  }, [loadSources]);
 
-  // Once we have at least one channel, hand off to the detail page.
-  if (channels.length > 0) {
-    return <Navigate to={`/channels/${channels[0].id}`} replace />;
+  // Once we have at least one source, hand off to the detail page.
+  if (sources.length > 0) {
+    return <Navigate to={`/sources/${sources[0].id}`} replace />;
   }
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-3.5rem)] text-sm text-muted-foreground">
-        Loading channels…
+        Loading sources…
       </div>
     );
   }
@@ -32,10 +32,10 @@ export default function ChannelsIndex() {
   return (
     <div className="flex items-center justify-center h-[calc(100vh-3.5rem)] px-6">
       <div className="max-w-md w-full">
-        <h1 className="text-xl font-semibold tracking-tight mb-1">No channels yet</h1>
+        <h1 className="text-xl font-semibold tracking-tight mb-1">No sources yet</h1>
         <p className="text-sm text-muted-foreground mb-4">
-          Paste a YouTube channel URL to start following it. Octoflash will pull
-          recent shorts and long-form videos as source ideas for your projects.
+          Sources are where Octoflash pulls video ideas from. Today we support
+          YouTube channels — paste a channel URL to start following it.
         </p>
 
         <form
@@ -45,7 +45,7 @@ export default function ChannelsIndex() {
             setLocalError(null);
             if (!url.trim()) return;
             try {
-              await createAndSync({ sourceUrl: url.trim() }, { maxVideos: 30 });
+              await createAndSync({ sourceUrl: url.trim() });
               setUrl("");
             } catch (err) {
               setLocalError((err as Error).message);

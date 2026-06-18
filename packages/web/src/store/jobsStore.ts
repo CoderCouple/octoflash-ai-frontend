@@ -1,45 +1,75 @@
 /**
- * In-flight Temporal jobs (variations / preview / export).
+ * In-flight Temporal executions (analyze / generate / regenerate).
+ *
+ * Filename + hook name kept as `jobsStore` / `useJobsStore` to avoid touching
+ * every consumer; internally everything is now an `Execution` row from the
+ * backend's `workflow_execution` table (polling URL `/api/v1/executions/:id`,
+ * uppercase ExecutionStatus enum).
  *
  * Components don't generally use this store directly — they call
- * `startVariationsJob` / `startPreviewJob` etc. which kick off the backend
- * workflow AND register a poller. Subscribe to `jobs[jobId]` to watch
- * progress and `outputUrl` when status flips to `done`.
+ * `startAnalyze` / `startGenerate` / `startRegenerate` which kick off the
+ * backend workflow AND register a poller. Subscribe to `jobs[executionId]`
+ * to watch progress; when status flips terminal (COMPLETED / FAILED /
+ * CANCELED / TERMINATED / TIMED_OUT), refetch the relevant project or scene.
  *
- * Polling stops automatically when the job hits a terminal state (`done` /
- * `failed`) or when `clear(jobId)` is called.
+ * `startGenerate` now returns `Execution[]` because the backend kicks one
+ * workflow per requested orientation (default = both portrait + landscape).
+ * Each execution gets polled independently.
  */
 
 import { create } from "zustand";
 
 import {
-  jobsApi,
-  scenesApi,
+  executionsApi,
+  isTerminalExecutionStatus,
   projectsApi,
-  type ExportFormat,
-  type GenerateVariationsInput,
-  type Job,
+  scenesApi,
+  type CreateFromSourceInput,
+  type CreateFromSourceResponse,
+  type Execution,
+  type Orientation,
 } from "@octoflash/core";
 
 interface JobsState {
-  /** All jobs we're tracking, keyed by job id. */
-  jobs: Record<string, Job>;
-  /** Active poller ids — internal bookkeeping. */
+  /** All executions we're tracking, keyed by execution id. */
+  jobs: Record<string, Execution>;
+  /** Active poller handles — internal bookkeeping. */
   _pollers: Record<string, ReturnType<typeof setInterval>>;
 }
 
 interface JobsActions {
   // ─── Kicks — start a workflow + auto-poll ────────────────────────────
-  startVariations(sceneId: string, input?: GenerateVariationsInput): Promise<Job>;
-  startPreview(projectId: string): Promise<Job>;
-  startExport(projectId: string, format?: ExportFormat): Promise<Job>;
+  /**
+   * `POST /projects/from-source` — creates an empty Project + kicks off
+   * AnalyzeProjectWorkflow. Returns the full response (project + sourceType
+   * + execution). Polling begins immediately if an execution came back;
+   * subscribe to `jobs[response.execution.id]`.
+   */
+  startAnalyze(input: CreateFromSourceInput): Promise<CreateFromSourceResponse>;
+
+  /**
+   * `POST /projects/{id}/generate` — kicks off ONE GenerateVideoWorkflow per
+   * requested orientation (default = both). Returns the list of executions
+   * (one per orientation); polling begins immediately for each.
+   */
+  startGenerate(
+    projectId: string,
+    maxClips?: number,
+    orientations?: Orientation[],
+  ): Promise<Execution[]>;
+
+  /**
+   * `POST /scenes/{id}/regenerate` — kicks off RegenerateClipWorkflow for
+   * one clip + auto-restitches its orientation-specific final video.
+   */
+  startRegenerate(sceneId: string): Promise<Execution>;
 
   // ─── Manual control ───────────────────────────────────────────────────
-  /** Begin polling an existing job (idempotent — no-op if already polling). */
-  track(jobId: string, intervalMs?: number): void;
+  /** Begin polling an existing execution (idempotent — no-op if already polling). */
+  track(executionId: string, intervalMs?: number): void;
   /** Stop polling + drop from local state. */
-  clear(jobId: string): void;
-  /** Stop polling all jobs (e.g. on logout). */
+  clear(executionId: string): void;
+  /** Stop polling all executions (e.g. on logout). */
   clearAll(): void;
 }
 
@@ -49,61 +79,68 @@ export const useJobsStore = create<JobsState & JobsActions>((set, get) => ({
   jobs: {},
   _pollers: {},
 
-  async startVariations(sceneId, input) {
-    const job = await scenesApi.generateVariations(sceneId, input);
-    set((s) => ({ jobs: { ...s.jobs, [job.id]: job } }));
-    get().track(job.id);
-    return job;
+  async startAnalyze(input) {
+    const response = await projectsApi.fromSource(input);
+    if (response.execution) {
+      const e = response.execution;
+      set((s) => ({ jobs: { ...s.jobs, [e.id]: e } }));
+      get().track(e.id);
+    }
+    return response;
   },
 
-  async startPreview(projectId) {
-    const job = await projectsApi.preview(projectId);
-    set((s) => ({ jobs: { ...s.jobs, [job.id]: job } }));
-    get().track(job.id);
-    return job;
+  async startGenerate(projectId, maxClips, orientations) {
+    const executions = await projectsApi.generate(projectId, { maxClips, orientations });
+    set((s) => {
+      const merged = { ...s.jobs };
+      for (const e of executions) merged[e.id] = e;
+      return { jobs: merged };
+    });
+    for (const e of executions) get().track(e.id);
+    return executions;
   },
 
-  async startExport(projectId, format = "mp4") {
-    const job = await projectsApi.export(projectId, format);
-    set((s) => ({ jobs: { ...s.jobs, [job.id]: job } }));
-    get().track(job.id);
-    return job;
+  async startRegenerate(sceneId) {
+    const execution = await scenesApi.regenerate(sceneId);
+    set((s) => ({ jobs: { ...s.jobs, [execution.id]: execution } }));
+    get().track(execution.id);
+    return execution;
   },
 
-  track(jobId, intervalMs = DEFAULT_INTERVAL) {
-    if (get()._pollers[jobId]) return;
+  track(executionId, intervalMs = DEFAULT_INTERVAL) {
+    if (get()._pollers[executionId]) return;
 
     const tick = async () => {
       try {
-        const job = await jobsApi.get(jobId);
-        set((s) => ({ jobs: { ...s.jobs, [jobId]: job } }));
-        if (job.status === "done" || job.status === "failed") {
+        const execution = await executionsApi.get(executionId);
+        set((s) => ({ jobs: { ...s.jobs, [executionId]: execution } }));
+        if (isTerminalExecutionStatus(execution.status)) {
           // Stop polling but keep the row so the UI can react to the final state.
-          const poller = get()._pollers[jobId];
+          const poller = get()._pollers[executionId];
           if (poller) clearInterval(poller);
           set((s) => {
-            const { [jobId]: _drop, ..._pollers } = s._pollers;
+            const { [executionId]: _drop, ..._pollers } = s._pollers;
             return { _pollers };
           });
         }
       } catch (e) {
         // Transient error — leave poller running; next tick may recover.
-        console.warn(`[jobsStore] poll failed for ${jobId}:`, e);
+        console.warn(`[jobsStore] poll failed for ${executionId}:`, e);
       }
     };
 
     const handle = setInterval(tick, intervalMs);
-    set((s) => ({ _pollers: { ...s._pollers, [jobId]: handle } }));
+    set((s) => ({ _pollers: { ...s._pollers, [executionId]: handle } }));
     // Fire one immediate tick so UI doesn't wait `intervalMs` for first state.
     void tick();
   },
 
-  clear(jobId) {
-    const poller = get()._pollers[jobId];
+  clear(executionId) {
+    const poller = get()._pollers[executionId];
     if (poller) clearInterval(poller);
     set((s) => {
-      const { [jobId]: _droppedJob, ...jobs } = s.jobs;
-      const { [jobId]: _droppedPoller, ..._pollers } = s._pollers;
+      const { [executionId]: _droppedJob, ...jobs } = s.jobs;
+      const { [executionId]: _droppedPoller, ..._pollers } = s._pollers;
       return { jobs, _pollers };
     });
   },

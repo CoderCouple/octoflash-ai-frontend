@@ -109,7 +109,7 @@ export function PublishDialog({
               <div>
                 <Label className="mb-1.5 block">Hashtags & mentions</Label>
                 <div className="flex flex-wrap gap-1">
-                  {["#physics", "#blackholes", "#einstein", "#shorts", "#science", "#manim", "@minutephysics"].map((t) => (
+                  {["#physics", "#blackholes", "#einstein", "#shorts", "#science", "#manim"].map((t) => (
                     <span key={t} className="text-[11px] px-2 py-0.5 rounded bg-secondary text-secondary-foreground">
                       {t}
                     </span>

@@ -44,9 +44,8 @@ export function LeftConfig() {
             </Field>
             <Field label="Channel">
               <div className="flex items-center gap-2 px-2.5 py-1.5 bg-muted rounded-md">
-                <span className="size-5 rounded-full bg-violet-700 text-white text-[10px] font-semibold flex items-center justify-center">MP</span>
-                <span className="text-xs font-medium">MinutePhysics</span>
-                <span className="text-xs text-muted-foreground">· 5.8M</span>
+                <span className="size-5 rounded-full bg-violet-700 text-white text-[10px] font-semibold flex items-center justify-center">CZ</span>
+                <span className="text-xs font-medium">ContextZeroAI</span>
               </div>
             </Field>
             <Field label="Tags">

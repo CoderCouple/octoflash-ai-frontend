@@ -27,8 +27,8 @@ export default function NotFoundPage() {
 
       <div className="flex gap-2">
         <Button asChild variant="outline" size="sm">
-          <Link to="/videos">
-            <Compass className="size-3.5 mr-1.5" /> Go to videos
+          <Link to="/projects">
+            <Compass className="size-3.5 mr-1.5" /> Go to projects
           </Link>
         </Button>
         <Button asChild variant="ghost" size="sm" onClick={() => window.history.back()}>
