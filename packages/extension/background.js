@@ -283,17 +283,20 @@ async function runLocalIngest({ maxFrames = 10, ingestOptions = {} } = {}) {
   }
 
   publishProgress("Reading captions…");
-  const meta = await sendToTab(tab.id, {
-    type: "octoflash-ingest:extract-transcript",
-  });
+  const meta = await sendToTabWithInject(
+    tab.id,
+    { type: "octoflash-ingest:extract-transcript" },
+    "ingest-youtube.js",
+  );
   if (!meta?.ok) {
     throw new Error(meta?.error || "Couldn't read captions from the page.");
   }
 
   publishProgress(`Sampling up to ${maxFrames} frames…`);
-  const framesRes = await sendToTab(
+  const framesRes = await sendToTabWithInject(
     tab.id,
     { type: "octoflash-ingest:capture-frames", maxFrames },
+    "ingest-youtube.js",
   );
   if (!framesRes?.ok) {
     throw new Error(framesRes?.error || "Frame capture failed.");
@@ -373,6 +376,36 @@ function sendToTab(tabId, message) {
       }
     });
   });
+}
+
+const _MISSING_RECEIVER_HINTS = [
+  "could not establish connection",
+  "receiving end does not exist",
+  "message port closed",
+];
+
+function looksLikeMissingReceiver(errMsg) {
+  if (!errMsg) return false;
+  const lower = String(errMsg).toLowerCase();
+  return _MISSING_RECEIVER_HINTS.some((h) => lower.includes(h));
+}
+
+/** Send a message to a tab. If the content script wasn't present
+ * (extension was reloaded while the tab stayed open), inject it via
+ * chrome.scripting and retry exactly once. */
+async function sendToTabWithInject(tabId, message, scriptFile) {
+  let res = await sendToTab(tabId, message);
+  if (res?.ok !== false || !looksLikeMissingReceiver(res?.error)) return res;
+  if (!chrome.scripting || !chrome.scripting.executeScript) return res;
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: [scriptFile],
+    });
+  } catch (e) {
+    return { ok: false, error: `inject ${scriptFile} failed: ${e?.message || e}` };
+  }
+  return await sendToTab(tabId, message);
 }
 
 async function fetchAsBase64(url) {

@@ -3,7 +3,7 @@
   "name": "Octoflash - Queue YouTube Videos",
   "version": "1.1.0",
   "description": "Right-click any YouTube video to queue it in Octoflash, and sync your YouTube cookies so the backend can fetch source video without IP-blocks.",
-  "permissions": ["contextMenus", "storage", "activeTab", "cookies", "alarms", "sidePanel"],
+  "permissions": ["contextMenus", "storage", "activeTab", "cookies", "alarms", "sidePanel", "scripting"],
   "host_permissions": [
     "*://*.youtube.com/*",
     "*://youtu.be/*",
