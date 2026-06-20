@@ -86,8 +86,8 @@ export default function TermsPage() {
         <Section title="10. Contact">
           <p>
             Questions about these Terms?{" "}
-            <a href="mailto:legal@octoflash.ai" className="underline underline-offset-2">
-              legal@octoflash.ai
+            <a href="mailto:support@octoflash.ai" className="underline underline-offset-2">
+              support@octoflash.ai
             </a>
             .
           </p>

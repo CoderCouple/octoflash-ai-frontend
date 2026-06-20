@@ -65,8 +65,8 @@ export default function PrivacyPage() {
         <Section title="Contact">
           <p>
             Privacy questions?{" "}
-            <a href="mailto:privacy@octoflash.ai" className="underline underline-offset-2">
-              privacy@octoflash.ai
+            <a href="mailto:support@octoflash.ai" className="underline underline-offset-2">
+              support@octoflash.ai
             </a>
             .
           </p>
